@@ -388,7 +388,7 @@ body.kiosk .wrap {
   flex-direction: column;
   max-width: 100%;
   min-height: 100dvh;
-  padding: 0 0.7rem calc(0.15rem + env(safe-area-inset-bottom));
+  padding: 0 0.7rem calc(0.2rem + env(safe-area-inset-bottom));
 }
 
 body.kiosk #main-section {
@@ -406,25 +406,28 @@ body.kiosk #contacts-section {
 
 body.kiosk #disk-section {
   flex: 0 0 auto;
-  padding-top: calc(2.1rem + env(safe-area-inset-top));
+  padding-top: calc(2.35rem + env(safe-area-inset-top));
   padding-bottom: 0.25rem;
 }
 
 body.kiosk #countdown-section {
   flex: 0 0 auto;
   padding-top: 0.4rem;
-  padding-bottom: 0.2rem;
+  padding-bottom: 0.35rem;
 }
 
 body.kiosk .countdown .clock {
-  font-size: clamp(3.2rem, 18vw, 6.2rem);
-  line-height: 1.04;
-  margin: 0.15rem 0 0.3rem;
+  font-size: clamp(2.5rem, 15vw, 4.7rem);
+  line-height: 1.02;
+  letter-spacing: 0;
+  margin: 0.2rem 0 0.35rem;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 body.kiosk #disk-svg {
-  width: min(42vw, 220px);
-  height: min(42vw, 220px);
+  width: min(45vw, 235px);
+  height: min(45vw, 235px);
 }
 
 body.kiosk section {
@@ -438,7 +441,7 @@ body.kiosk #contacts-section {
   min-height: 0;
   max-height: none;
   overflow: auto;
-  padding-top: 0.25rem;
+  padding-top: 0.4rem;
   padding-bottom: 0.1rem;
 }
 
@@ -452,15 +455,15 @@ body.kiosk .label {
 
 body.kiosk .disk-wrap {
   display: grid;
-  grid-template-columns: min(42vw, 220px) 1fr;
+  grid-template-columns: min(45vw, 235px) 1fr;
   align-items: center;
-  gap: 1rem;
+  gap: 1.1rem;
   padding: 0.1rem 0;
   text-align: left;
 }
 
 body.kiosk .mag-readout .num {
-  font-size: clamp(1.8rem, 8.6vw, 2.8rem);
+  font-size: clamp(2rem, 9.2vw, 3rem);
 }
 
 body.kiosk .phase-name {
@@ -475,27 +478,47 @@ body.kiosk .sun-geo {
 
 body.kiosk #disk-svg {
   grid-row: 1 / 4;
-  width: min(42vw, 220px);
-  height: min(42vw, 220px);
+  width: min(45vw, 235px);
+  height: min(45vw, 235px);
 }
 
 body.kiosk .contact {
-  gap: 0.65rem;
-  padding: 0.48rem 0;
+  gap: 0.7rem;
+  padding: 0.55rem 0;
 }
 
 body.kiosk .contact .time {
-  font-size: 1.05rem;
+  font-size: 1.18rem;
 }
 
 body.kiosk .contact-geo,
 body.kiosk .duration-note,
 body.kiosk .sun-geo {
-  font-size: 0.72rem;
+  font-size: 0.76rem;
 }
 
 body.kiosk .contact .desc {
-  font-size: 0.84rem;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 380px) {
+  body.kiosk .countdown .clock {
+    font-size: clamp(2.1rem, 14.2vw, 3.6rem);
+  }
+
+  body.kiosk .disk-wrap {
+    grid-template-columns: min(42vw, 170px) 1fr;
+    gap: 0.75rem;
+  }
+
+  body.kiosk #disk-svg {
+    width: min(42vw, 170px);
+    height: min(42vw, 170px);
+  }
+
+  body.kiosk .contact .time {
+    font-size: 1rem;
+  }
 }
 
 .countdown {

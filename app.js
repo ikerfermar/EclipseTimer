@@ -16,7 +16,7 @@ const TAN_F1 = 0.0046141;
 const TAN_F2 = 0.0045911;
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
-const UI_TICK_MS = 200;
+const UI_TICK_MS = 100;
 
 const $ = (id) => document.getElementById(id);
 
@@ -677,7 +677,9 @@ function updateCountdown(t, c) {
 
   const next = events.find((e) => e.t > t);
   if (next) {
-    const diffSec = Math.max(0, Math.round((next.t - t) * 3600));
+    // Use ceil to keep second transitions aligned with the device clock
+    // and avoid displaying the next second too early.
+    const diffSec = Math.max(0, Math.ceil((next.t - t) * 3600));
     const hh = Math.floor(diffSec / 3600);
     const mm = Math.floor((diffSec % 3600) / 60);
     const ss = diffSec % 60;
