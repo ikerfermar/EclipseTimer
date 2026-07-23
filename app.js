@@ -30,7 +30,7 @@ let state = {
   testMode: false,
   testStartReal: null,
   testStartVirtualT: null,
-  testSpeed: 5,
+  testSpeed: 1,
   locating: false
 };
 
@@ -41,6 +41,7 @@ let lastUiTick = 0;
 let sharedAudioCtx = null;
 let keepAliveCtx = null;
 let keepAliveOsc = null;
+let keepAliveTickId = null;
 let diskNodes = null;
 let hiddenAtMs = null;
 let speechTimer = null;
@@ -759,7 +760,24 @@ function stopKeepAlive() {
   }
   keepAliveOsc = null;
   keepAliveCtx = null;
+  if (keepAliveTickId) {
+    clearInterval(keepAliveTickId);
+    keepAliveTickId = null;
+  }
   $("keepalive-status").textContent = "Desactivado. Actívalo si vas a cambiar de app.";
+}
+
+function startKeepAliveTick() {
+  if (keepAliveTickId) return;
+  keepAliveTickId = setInterval(() => {
+    if (state.contacts) tick();
+  }, 1000);
+}
+
+function stopKeepAliveTick() {
+  if (!keepAliveTickId) return;
+  clearInterval(keepAliveTickId);
+  keepAliveTickId = null;
 }
 
 function bindEvents() {
@@ -789,6 +807,7 @@ function bindEvents() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
+      stopKeepAliveTick();
       if (state.testMode && hiddenAtMs !== null) {
         const hiddenDuration = performance.now() - hiddenAtMs;
         state.testStartReal += hiddenDuration;
@@ -797,7 +816,11 @@ function bindEvents() {
       if (state.contacts || $("chk-keepalive").checked) acquireWakeLock();
     } else {
       if (state.testMode) hiddenAtMs = performance.now();
-      if (!$("chk-keepalive").checked) releaseWakeLock();
+      if ($("chk-keepalive").checked) {
+        startKeepAliveTick();
+      } else {
+        releaseWakeLock();
+      }
     }
   });
 
@@ -821,7 +844,7 @@ function bindEvents() {
       return;
     }
     state.testMode = true;
-    state.testSpeed = parseFloat($("test-speed").value) || 5;
+    state.testSpeed = 1;
     state.testStartReal = performance.now();
     state.testStartVirtualT = c.c2 - 40 / 3600;
     resetAlerts();
