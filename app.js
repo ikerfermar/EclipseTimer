@@ -47,8 +47,8 @@ let speechLastAtMs = 0;
 
 const SPEECH_MIN_GAP_MS = 900;
 const SPEECH_TEST_GAP_MS = 1400;
-const RESULT_SECTION_IDS = ["main-section", "ops-section", "alerts-section"];
-const COLLAPSIBLE_POST_LOCATION_IDS = ["ops-section", "alerts-section"];
+const RESULT_SECTION_IDS = ["main-section", "alerts-section", "ops-section"];
+const COLLAPSIBLE_POST_LOCATION_IDS = ["alerts-section", "ops-section"];
 
 function poly(c, t) {
   return c[0] + c[1] * t + c[2] * t * t + c[3] * t * t * t;
@@ -413,7 +413,7 @@ function renderContacts() {
       const geo = sunAltAz(r.t, state.lat, state.lon);
       const geoDiv = document.createElement("div");
       geoDiv.className = "contact-geo";
-      geoDiv.textContent = `Sol: ${geo.alt.toFixed(0)}° alt · ${geo.az.toFixed(0)}° az`;
+      geoDiv.textContent = `${geo.alt.toFixed(0)}° alt · ${geo.az.toFixed(0)}° az`;
       list.appendChild(geoDiv);
     }
   });
@@ -753,7 +753,7 @@ function tick() {
 
   if (c.c1 !== null) {
     const geo = sunAltAz(t, state.lat, state.lon);
-    $("sun-geo").textContent = geo.alt > -1 ? `Sol: ${geo.alt.toFixed(0)}° alt · ${geo.az.toFixed(0)}° az` : "Sol bajo el horizonte";
+    $("sun-geo").textContent = geo.alt > -1 ? `${geo.alt.toFixed(0)}° alt · ${geo.az.toFixed(0)}° az` : "Sol bajo el horizonte";
   }
 
   updateCountdown(t, c);
