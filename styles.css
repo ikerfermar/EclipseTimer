@@ -54,6 +54,19 @@ header {
   border-bottom: 1px solid var(--line);
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.brand-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  flex: 0 0 48px;
+}
+
 .eyebrow {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.7rem;
@@ -104,12 +117,8 @@ section {
   color: #8b8779;
 }
 
-.section-title-static {
-  margin-bottom: 1rem;
-}
-
 .stack-block {
-  padding-top: 0.9rem;
+  padding-top: 1rem;
   border-top: 1px solid var(--line);
 }
 
@@ -174,7 +183,13 @@ section {
   gap: 0.6rem;
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.loc-actions-bottom {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
 }
 
 button,
@@ -222,6 +237,12 @@ button.small {
   font-size: 0.75rem;
   padding: 0.5rem 0.8rem;
   min-height: 40px;
+}
+
+button.secondary {
+  border-style: dashed;
+  border-color: #8b8779;
+  color: #b9b4a7;
 }
 
 .coord-grid {
@@ -383,19 +404,19 @@ body.kiosk #disk-section {
 
 body.kiosk #countdown-section {
   flex: 0 0 auto;
-  padding-top: 0.35rem;
+  padding-top: 0.55rem;
   padding-bottom: 0.35rem;
 }
 
 body.kiosk .countdown .clock {
-  font-size: clamp(1.8rem, 10vw, 3.1rem);
+  font-size: clamp(2.6rem, 16vw, 5rem);
   line-height: 1.04;
-  margin: 0.2rem 0;
+  margin: 0.25rem 0 0.35rem;
 }
 
 body.kiosk #disk-svg {
-  width: min(48vw, 220px);
-  height: min(48vw, 220px);
+  width: min(42vw, 220px);
+  height: min(42vw, 220px);
 }
 
 body.kiosk section {
@@ -423,15 +444,15 @@ body.kiosk .label {
 
 body.kiosk .disk-wrap {
   display: grid;
-  grid-template-columns: min(34vw, 160px) 1fr;
+  grid-template-columns: min(42vw, 220px) 1fr;
   align-items: center;
-  gap: 0.7rem;
+  gap: 1rem;
   padding: 0.1rem 0;
   text-align: left;
 }
 
 body.kiosk .mag-readout .num {
-  font-size: clamp(1.45rem, 7.2vw, 2rem);
+  font-size: clamp(1.8rem, 8.6vw, 2.8rem);
 }
 
 body.kiosk .phase-name {
@@ -446,32 +467,32 @@ body.kiosk .sun-geo {
 
 body.kiosk #disk-svg {
   grid-row: 1 / 4;
-  width: min(34vw, 160px);
-  height: min(34vw, 160px);
+  width: min(42vw, 220px);
+  height: min(42vw, 220px);
 }
 
 body.kiosk .contact {
-  gap: 0.55rem;
-  padding: 0.4rem 0;
+  gap: 0.65rem;
+  padding: 0.48rem 0;
 }
 
 body.kiosk .contact .time {
-  font-size: 0.92rem;
+  font-size: 1.05rem;
 }
 
 body.kiosk .contact-geo,
 body.kiosk .duration-note,
 body.kiosk .sun-geo {
-  font-size: 0.64rem;
+  font-size: 0.72rem;
 }
 
 body.kiosk .contact .desc {
-  font-size: 0.76rem;
+  font-size: 0.84rem;
 }
 
 .countdown {
   text-align: center;
-  padding: 0.5rem 0 0.25rem;
+  padding: 0.5rem 0 0.4rem;
 }
 
 .countdown .next-label {
@@ -554,6 +575,10 @@ body.kiosk .contact .desc {
   flex-wrap: wrap;
 }
 
+.fullscreen-row {
+  margin-bottom: 0.65rem;
+}
+
 footer {
   margin-top: auto;
   padding: 1.75rem 1.25rem 2.5rem;
@@ -596,6 +621,12 @@ footer a {
 
   #alert-banner-text {
     font-size: 1.6rem !important;
+  }
+
+  .brand-logo {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
   }
 }
 

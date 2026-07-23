@@ -7,6 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" type="image/png" href="assets/images/logo.png">
+<link rel="apple-touch-icon" href="assets/images/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=Source+Serif+4:wght@400;600&display=swap" rel="stylesheet">
@@ -17,7 +19,10 @@
 <div class="wrap">
   <header>
     <div class="eyebrow">Cronometro de eclipse</div>
-    <h1>Eclipse total<br>12 agosto 2026</h1>
+    <div class="title-row">
+      <img src="assets/images/logo.png" alt="Logo EclipseTimer" class="brand-logo">
+      <h1>Eclipse total<br>12 agosto 2026</h1>
+    </div>
   </header>
 
   <section id="loc-section" class="accordion-section is-open">
@@ -28,8 +33,7 @@
     <div class="section-body" id="loc-section-body">
     <div class="loc-row">
       <button class="primary" id="btn-locate" aria-label="Obtener ubicacion GPS">Usar mi ubicacion</button>
-      <button class="small" id="btn-recalc" aria-label="Recalcular con coordenadas actuales">Recalcular</button>
-      <button class="small" id="btn-leon" aria-label="Cargar coordenadas de Leon">Usar Leon</button>
+      <button class="small" id="btn-leon" aria-label="Cargar coordenadas de León">Usar León</button>
     </div>
     <div class="coord-grid">
       <div class="coord-field">
@@ -56,12 +60,13 @@
       </div>
     </div>
     <div class="coord-status" id="loc-status" aria-live="polite">Automatica o manual.</div>
+    <div class="loc-actions-bottom">
+      <button class="small secondary" id="btn-recalc" aria-label="Recalcular con coordenadas actuales">Actualizar calculo</button>
+    </div>
     </div>
   </section>
 
   <section id="main-section" hidden>
-    <div class="section-title section-title-static">Seguimiento</div>
-
     <div id="disk-section" class="stack-block">
       <div class="section-title">Estado actual</div>
       <div class="disk-wrap">
@@ -82,7 +87,7 @@
         <div class="clock" id="cd-clock">--:--:--</div>
         <div class="event-name" id="cd-event">-</div>
       </div>
-      <div class="announce-row" style="justify-content:center; margin-top:1rem;">
+      <div class="announce-row fullscreen-row" style="justify-content:center; margin-top:1rem;">
         <button class="small" id="btn-fullscreen">Pantalla completa</button>
       </div>
     </div>
@@ -94,9 +99,21 @@
     </div>
   </section>
 
+  <section id="alerts-section" class="accordion-section is-collapsed" hidden>
+    <button type="button" class="section-toggle" data-section="alerts-section" aria-expanded="false" aria-controls="alerts-section-body">
+      <span class="section-title">Avisos de observacion y fotografia</span>
+      <span class="section-toggle-icon" aria-hidden="true"></span>
+    </button>
+    <div class="section-body" id="alerts-section-body" hidden>
+    <div class="contact" style="border-top:none;"><div class="tag" style="color:#e0ac5c;">-30s</div><div class="desc">Mano al filtro</div><div></div></div>
+    <div class="contact"><div class="tag" style="color:#5f7a5e;">-20s</div><div class="desc">Quita el filtro</div><div></div></div>
+    <div class="contact"><div class="tag" style="color:#9c4632;">-10s</div><div class="desc">Pon el filtro</div><div></div></div>
+    </div>
+  </section>
+
   <section id="ops-section" class="accordion-section is-collapsed" hidden>
     <button type="button" class="section-toggle" data-section="ops-section" aria-expanded="false" aria-controls="ops-section-body">
-      <span class="section-title">Voz y modo de prueba</span>
+      <span class="section-title">Modo de prueba</span>
       <span class="section-toggle-icon" aria-hidden="true"></span>
     </button>
     <div class="section-body" id="ops-section-body" hidden>
@@ -110,25 +127,13 @@
       </label>
 
       <div id="test-section" class="stack-block stack-block-tight">
-        <div class="section-title">Modo de prueba</div>
+        <div class="section-title">Prueba rapida</div>
         <div class="announce-row" style="align-items:center;">
           <button id="btn-test-start" class="primary">Iniciar prueba</button>
           <button id="btn-test-stop" class="small">Salir</button>
         </div>
         <div class="duration-note" id="test-status">Inactivo.</div>
       </div>
-    </div>
-  </section>
-
-  <section id="alerts-section" class="accordion-section is-collapsed" hidden>
-    <button type="button" class="section-toggle" data-section="alerts-section" aria-expanded="false" aria-controls="alerts-section-body">
-      <span class="section-title">Avisos de filtro</span>
-      <span class="section-toggle-icon" aria-hidden="true"></span>
-    </button>
-    <div class="section-body" id="alerts-section-body" hidden>
-    <div class="contact" style="border-top:none;"><div class="tag" style="color:#e0ac5c;">-30s</div><div class="desc">Mano al filtro</div><div></div></div>
-    <div class="contact"><div class="tag" style="color:#5f7a5e;">-20s</div><div class="desc">Quita el filtro</div><div></div></div>
-    <div class="contact"><div class="tag" style="color:#9c4632;">-10s</div><div class="desc">Pon el filtro</div><div></div></div>
     </div>
   </section>
 
