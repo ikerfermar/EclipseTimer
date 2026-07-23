@@ -108,20 +108,8 @@
     <div class="announce-row" style="align-items:center;">
       <button id="btn-test-start" class="primary">Iniciar prueba</button>
       <button id="btn-test-stop" class="small">Salir</button>
-      <select id="test-speed" style="background:transparent; color:var(--paper); border:1px solid var(--line-light); border-radius:2px; padding:.55rem .6rem; min-height:44px; font-family:'IBM Plex Mono', monospace; font-size:.78rem;" aria-label="Velocidad del modo de prueba">
-        <option value="1" selected>x1</option>
-      </select>
     </div>
     <div class="duration-note" id="test-status">Inactivo.</div>
-  </section>
-
-  <section id="persist-section">
-    <div class="label">Segundo plano</div>
-    <label style="display:flex; align-items:center; gap:.6rem; font-size:.82rem; cursor:pointer;">
-      <input type="checkbox" id="chk-keepalive" style="width:20px; height:20px; accent-color:#e0ac5c;">
-      Modo persistente (tono casi inaudible + notificaciones)
-    </label>
-    <div class="duration-note" id="keepalive-status">Desactivado. Activalo si vas a cambiar de app.</div>
   </section>
 
   <div id="alert-banner" style="display:none; position:fixed; inset:0; z-index:999; align-items:center; justify-content:center; text-align:center; padding:2rem; flex-direction:column; gap:.75rem; background:rgba(0,0,0,.95); color:#e9e6dd; border-top:6px solid #e0ac5c;" aria-live="assertive" aria-hidden="true">

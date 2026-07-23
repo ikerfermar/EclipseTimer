@@ -39,9 +39,6 @@ let bannerTimeout = null;
 let rafId = null;
 let lastUiTick = 0;
 let sharedAudioCtx = null;
-let keepAliveCtx = null;
-let keepAliveOsc = null;
-let keepAliveTickId = null;
 let diskNodes = null;
 let hiddenAtMs = null;
 let speechTimer = null;
@@ -729,57 +726,6 @@ function exitKiosk() {
   }
 }
 
-function startKeepAlive() {
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    keepAliveCtx = new Ctx();
-    keepAliveOsc = keepAliveCtx.createOscillator();
-    const gain = keepAliveCtx.createGain();
-    keepAliveOsc.frequency.value = 30;
-    gain.gain.value = 0.015;
-    keepAliveOsc.connect(gain);
-    gain.connect(keepAliveCtx.destination);
-    keepAliveOsc.start();
-
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-    acquireWakeLock();
-    $("keepalive-status").textContent = "Activo. No cierres la pestaña, solo minimízala.";
-  } catch (_) {
-    $("keepalive-status").textContent = "No se pudo activar en este navegador.";
-  }
-}
-
-function stopKeepAlive() {
-  try {
-    if (keepAliveOsc) keepAliveOsc.stop();
-    if (keepAliveCtx) keepAliveCtx.close();
-  } catch (_) {
-    // ignore
-  }
-  keepAliveOsc = null;
-  keepAliveCtx = null;
-  if (keepAliveTickId) {
-    clearInterval(keepAliveTickId);
-    keepAliveTickId = null;
-  }
-  $("keepalive-status").textContent = "Desactivado. Actívalo si vas a cambiar de app.";
-}
-
-function startKeepAliveTick() {
-  if (keepAliveTickId) return;
-  keepAliveTickId = setInterval(() => {
-    if (state.contacts) tick();
-  }, 1000);
-}
-
-function stopKeepAliveTick() {
-  if (!keepAliveTickId) return;
-  clearInterval(keepAliveTickId);
-  keepAliveTickId = null;
-}
-
 function bindEvents() {
   setupHemiToggle("lat-hemi", ["N", "S"]);
   setupHemiToggle("lon-hemi", ["O", "E"]);
@@ -807,20 +753,15 @@ function bindEvents() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      stopKeepAliveTick();
       if (state.testMode && hiddenAtMs !== null) {
         const hiddenDuration = performance.now() - hiddenAtMs;
         state.testStartReal += hiddenDuration;
         hiddenAtMs = null;
       }
-      if (state.contacts || $("chk-keepalive").checked) acquireWakeLock();
+      if (state.contacts) acquireWakeLock();
     } else {
       if (state.testMode) hiddenAtMs = performance.now();
-      if ($("chk-keepalive").checked) {
-        startKeepAliveTick();
-      } else {
-        releaseWakeLock();
-      }
+      releaseWakeLock();
     }
   });
 
@@ -858,15 +799,6 @@ function bindEvents() {
     resetAlerts();
     $("test-status").textContent = "Inactivo.";
     hideBanner();
-  });
-
-  $("chk-keepalive").addEventListener("change", (e) => {
-    if (e.target.checked) {
-      startKeepAlive();
-    } else {
-      stopKeepAlive();
-      if (!state.contacts) releaseWakeLock();
-    }
   });
 
   ["in-lat", "in-lon", "in-alt"].forEach((id) => {
