@@ -279,6 +279,13 @@ function applyPostLocationLayout() {
   COLLAPSIBLE_POST_LOCATION_IDS.forEach((sectionId) => {
     setSectionOpen(sectionId, false);
   });
+
+  const main = $("main-section");
+  if (main && !main.hidden) {
+    requestAnimationFrame(() => {
+      main.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 }
 
 function cancelLocateRequest(statusMsg, statusClass) {

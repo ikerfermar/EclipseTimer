@@ -31,6 +31,8 @@ body {
   color: var(--paper);
   font-family: "IBM Plex Sans", sans-serif;
   -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
   padding-bottom: calc(2.5rem + env(safe-area-inset-bottom));
@@ -38,6 +40,10 @@ body {
 }
 
 .wrap {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   max-width: 640px;
   margin: 0 auto;
   padding: 0 1.1rem;
@@ -549,6 +555,7 @@ body.kiosk .contact .desc {
 }
 
 footer {
+  margin-top: auto;
   padding: 1.75rem 1.25rem 2.5rem;
   font-size: 0.72rem;
   color: #6b6759;
