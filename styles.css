@@ -267,17 +267,31 @@ body.kiosk footer {
   display: none !important;
 }
 
+body.kiosk .wrap {
+  max-width: 100%;
+  min-height: 100dvh;
+  padding: 0 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+}
+
 body.kiosk .countdown .clock {
-  font-size: 4.6rem;
+  font-size: clamp(2.15rem, 13vw, 4rem);
+  line-height: 1.04;
 }
 
 body.kiosk #disk-svg {
-  width: 230px;
-  height: 230px;
+  width: min(55vw, 260px);
+  height: min(55vw, 260px);
 }
 
 body.kiosk section {
   border-bottom: none;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+body.kiosk #contacts-section {
+  max-height: 38dvh;
+  overflow: auto;
 }
 
 .countdown {
