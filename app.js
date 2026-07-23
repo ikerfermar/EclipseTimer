@@ -42,6 +42,12 @@ let sharedAudioCtx = null;
 let keepAliveCtx = null;
 let keepAliveOsc = null;
 let diskNodes = null;
+let hiddenAtMs = null;
+let speechTimer = null;
+let speechLastAtMs = 0;
+
+const SPEECH_MIN_GAP_MS = 900;
+const SPEECH_TEST_GAP_MS = 1400;
 
 function poly(c, t) {
   return c[0] + c[1] * t + c[2] * t * t + c[3] * t * t * t;
@@ -415,13 +421,36 @@ function beep(freq, times = 1) {
   }
 }
 
-function speak(text, interrupt = true) {
-  if (!("speechSynthesis" in window)) return;
+function speakNow(text, interrupt) {
   if (interrupt) window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "es-ES";
   u.rate = 1.0;
   window.speechSynthesis.speak(u);
+  speechLastAtMs = performance.now();
+}
+
+function speak(text, interrupt = true) {
+  if (!("speechSynthesis" in window)) return;
+
+  const now = performance.now();
+  const minGap = state.testMode ? SPEECH_TEST_GAP_MS : SPEECH_MIN_GAP_MS;
+  const delta = now - speechLastAtMs;
+
+  if (speechTimer) {
+    clearTimeout(speechTimer);
+    speechTimer = null;
+  }
+
+  if (delta >= minGap) {
+    speakNow(text, interrupt);
+    return;
+  }
+
+  speechTimer = setTimeout(() => {
+    speakNow(text, interrupt);
+    speechTimer = null;
+  }, minGap - delta);
 }
 
 function notify(title, body) {
@@ -760,9 +789,15 @@ function bindEvents() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
+      if (state.testMode && hiddenAtMs !== null) {
+        const hiddenDuration = performance.now() - hiddenAtMs;
+        state.testStartReal += hiddenDuration;
+        hiddenAtMs = null;
+      }
       if (state.contacts || $("chk-keepalive").checked) acquireWakeLock();
-    } else if (!$("chk-keepalive").checked) {
-      releaseWakeLock();
+    } else {
+      if (state.testMode) hiddenAtMs = performance.now();
+      if (!$("chk-keepalive").checked) releaseWakeLock();
     }
   });
 
@@ -822,8 +857,4 @@ window.addEventListener("load", () => {
   bindEvents();
   updateLocateButton();
   hideBanner();
-
-  if (navigator.geolocation) {
-    locateUser();
-  }
 });
