@@ -61,10 +61,11 @@ header {
 }
 
 .brand-logo {
-  width: 48px;
-  height: 48px;
+  width: clamp(34px, 7vw, 46px);
+  height: auto;
+  max-height: 46px;
   object-fit: contain;
-  flex: 0 0 48px;
+  flex: 0 0 auto;
 }
 
 .eyebrow {
@@ -387,7 +388,14 @@ body.kiosk .wrap {
   flex-direction: column;
   max-width: 100%;
   min-height: 100dvh;
-  padding: 0 0.75rem calc(0.5rem + env(safe-area-inset-bottom));
+  padding: 0 0.7rem calc(0.15rem + env(safe-area-inset-bottom));
+}
+
+body.kiosk #main-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 body.kiosk #disk-section,
@@ -398,20 +406,20 @@ body.kiosk #contacts-section {
 
 body.kiosk #disk-section {
   flex: 0 0 auto;
-  padding-top: calc(2.8rem + env(safe-area-inset-top));
-  padding-bottom: 0.35rem;
+  padding-top: calc(2.1rem + env(safe-area-inset-top));
+  padding-bottom: 0.25rem;
 }
 
 body.kiosk #countdown-section {
   flex: 0 0 auto;
-  padding-top: 0.55rem;
-  padding-bottom: 0.35rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.2rem;
 }
 
 body.kiosk .countdown .clock {
-  font-size: clamp(2.6rem, 16vw, 5rem);
+  font-size: clamp(3.2rem, 18vw, 6.2rem);
   line-height: 1.04;
-  margin: 0.25rem 0 0.35rem;
+  margin: 0.15rem 0 0.3rem;
 }
 
 body.kiosk #disk-svg {
@@ -430,8 +438,8 @@ body.kiosk #contacts-section {
   min-height: 0;
   max-height: none;
   overflow: auto;
-  padding-top: 0.35rem;
-  padding-bottom: 0.25rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.1rem;
 }
 
 body.kiosk .countdown .event-name {
@@ -579,6 +587,24 @@ body.kiosk .contact .desc {
   margin-bottom: 0.65rem;
 }
 
+body.kiosk #btn-fullscreen {
+  display: none !important;
+}
+
+#ops-section .section-body > .section-title {
+  display: block;
+  margin-bottom: 0.7rem;
+}
+
+#ops-section #test-section .section-title {
+  display: block;
+  margin-bottom: 0.65rem;
+}
+
+#ops-section #test-section .announce-row {
+  margin-top: 0.15rem;
+}
+
 footer {
   margin-top: auto;
   padding: 1.75rem 1.25rem 2.5rem;
@@ -625,8 +651,7 @@ footer a {
 
   .brand-logo {
     width: 40px;
-    height: 40px;
-    flex-basis: 40px;
+    max-height: 40px;
   }
 }
 
