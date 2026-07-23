@@ -47,8 +47,8 @@ let speechLastAtMs = 0;
 
 const SPEECH_MIN_GAP_MS = 900;
 const SPEECH_TEST_GAP_MS = 1400;
-const RESULT_SECTION_IDS = ["disk-section", "countdown-section", "contacts-section", "announce-section", "alerts-section", "test-section"];
-const PRIMARY_OPEN_SECTION_IDS = ["disk-section", "countdown-section", "contacts-section"];
+const RESULT_SECTION_IDS = ["main-section", "ops-section", "alerts-section"];
+const COLLAPSIBLE_POST_LOCATION_IDS = ["ops-section", "alerts-section"];
 
 function poly(c, t) {
   return c[0] + c[1] * t + c[2] * t * t + c[3] * t * t * t;
@@ -276,8 +276,8 @@ function revealResultSections() {
 function applyPostLocationLayout() {
   revealResultSections();
   setSectionOpen("loc-section", false);
-  RESULT_SECTION_IDS.forEach((sectionId) => {
-    setSectionOpen(sectionId, PRIMARY_OPEN_SECTION_IDS.includes(sectionId));
+  COLLAPSIBLE_POST_LOCATION_IDS.forEach((sectionId) => {
+    setSectionOpen(sectionId, false);
   });
 }
 

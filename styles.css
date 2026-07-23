@@ -98,6 +98,24 @@ section {
   color: #8b8779;
 }
 
+.section-title-static {
+  margin-bottom: 1rem;
+}
+
+.stack-block {
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+.stack-block:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.stack-block-tight {
+  margin-top: 1rem;
+}
+
 .section-toggle-icon {
   position: relative;
   width: 0.9rem;
@@ -322,9 +340,8 @@ svg {
 
 body.kiosk header,
 body.kiosk #loc-section,
-body.kiosk #announce-section,
+body.kiosk #ops-section,
 body.kiosk #alerts-section,
-body.kiosk #test-section,
 body.kiosk footer {
   display: none !important;
 }
@@ -354,7 +371,7 @@ body.kiosk #contacts-section {
 
 body.kiosk #disk-section {
   flex: 0 0 auto;
-  padding-top: calc(0.75rem + env(safe-area-inset-top));
+  padding-top: calc(2.8rem + env(safe-area-inset-top));
   padding-bottom: 0.35rem;
 }
 
@@ -580,13 +597,13 @@ footer a {
   backdrop-filter: blur(10px);
   font-size: 0.72rem;
   padding: 0.45rem 0.7rem;
-  min-height: 36px;
+  min-height: 32px;
 }
 
 body.kiosk #btn-exit-kiosk {
-  top: auto !important;
+  top: calc(0.55rem + env(safe-area-inset-top)) !important;
   right: 0.75rem;
-  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  bottom: auto;
 }
 
 @media (max-width: 360px) {
