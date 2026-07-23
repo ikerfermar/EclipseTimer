@@ -31,7 +31,8 @@ let state = {
   testStartReal: null,
   testStartVirtualT: null,
   testSpeed: 1,
-  locating: false
+  locating: false,
+  locationRequestId: 0
 };
 
 let wakeLockRef = null;
@@ -46,6 +47,8 @@ let speechLastAtMs = 0;
 
 const SPEECH_MIN_GAP_MS = 900;
 const SPEECH_TEST_GAP_MS = 1400;
+const RESULT_SECTION_IDS = ["disk-section", "countdown-section", "contacts-section", "announce-section", "alerts-section", "test-section"];
+const PRIMARY_OPEN_SECTION_IDS = ["disk-section", "countdown-section", "contacts-section"];
 
 function poly(c, t) {
   return c[0] + c[1] * t + c[2] * t * t + c[3] * t * t * t;
@@ -251,6 +254,50 @@ function updateLocateButton() {
   btn.textContent = state.locating ? "Buscando..." : "Usar mi ubicación";
 }
 
+function setSectionOpen(sectionId, isOpen) {
+  const section = $(sectionId);
+  if (!section) return;
+
+  const toggle = section.querySelector(".section-toggle");
+  const body = section.querySelector(".section-body");
+  section.classList.toggle("is-open", isOpen);
+  section.classList.toggle("is-collapsed", !isOpen);
+
+  if (toggle) toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  if (body) body.hidden = !isOpen;
+}
+
+function revealResultSections() {
+  RESULT_SECTION_IDS.forEach((sectionId) => {
+    $(sectionId).hidden = false;
+  });
+}
+
+function applyPostLocationLayout() {
+  revealResultSections();
+  setSectionOpen("loc-section", false);
+  RESULT_SECTION_IDS.forEach((sectionId) => {
+    setSectionOpen(sectionId, PRIMARY_OPEN_SECTION_IDS.includes(sectionId));
+  });
+}
+
+function cancelLocateRequest(statusMsg, statusClass) {
+  if (!state.locating) return;
+  state.locationRequestId += 1;
+  state.locating = false;
+  updateLocateButton();
+  if ($("loc-source").textContent === "buscando...") {
+    $("loc-source").textContent = "sin datos";
+  }
+  if (statusMsg) {
+    setLocStatus(statusMsg, statusClass);
+  }
+}
+
+function isLikelySafariIOS() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
+}
+
 function locateUser() {
   if (!navigator.geolocation) {
     setLocStatus("Sin geolocalización. Introduce coordenadas a mano.", "err");
@@ -258,6 +305,7 @@ function locateUser() {
   }
   if (state.locating) return;
 
+  const requestId = ++state.locationRequestId;
   state.locating = true;
   updateLocateButton();
   setLocStatus("Buscando señal GPS...");
@@ -265,6 +313,7 @@ function locateUser() {
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
+      if (requestId !== state.locationRequestId) return;
       state.locating = false;
       updateLocateButton();
 
@@ -279,11 +328,15 @@ function locateUser() {
       recalc();
     },
     (err) => {
+      if (requestId !== state.locationRequestId) return;
       state.locating = false;
       updateLocateButton();
 
       if (err.code === 1) {
-        setLocStatus("Bloqueada por el navegador. Usa coordenadas manuales o 'Usar León'.", "err");
+        const safariHint = isLikelySafariIOS()
+          ? "Safari ha bloqueado la ubicación. Revisa Ajustes del sitio web > Ubicación > Permitir y recarga la página."
+          : "Bloqueada por el navegador. Usa coordenadas manuales o 'Usar León'.";
+        setLocStatus(safariHint, "err");
       } else {
         setLocStatus("No se pudo obtener la ubicación. Introduce coordenadas a mano.", "err");
       }
@@ -294,6 +347,8 @@ function locateUser() {
 }
 
 function recalc() {
+  cancelLocateRequest("Usando coordenadas actuales.", "ok");
+
   const lat = readLat();
   const lon = readLon();
   const alt = parseFloat($("in-alt").value) || 0;
@@ -318,9 +373,7 @@ function recalc() {
   }
 
   renderContacts();
-  ["disk-section", "countdown-section", "contacts-section", "announce-section", "alerts-section"].forEach((id) => {
-    $(id).style.display = "";
-  });
+  applyPostLocationLayout();
 
   acquireWakeLock();
   startLoop();
@@ -730,9 +783,19 @@ function bindEvents() {
   setupHemiToggle("lat-hemi", ["N", "S"]);
   setupHemiToggle("lon-hemi", ["O", "E"]);
 
+  document.querySelectorAll(".section-toggle").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const sectionId = toggle.dataset.section;
+      const section = $(sectionId);
+      if (!section || section.hidden) return;
+      setSectionOpen(sectionId, !section.classList.contains("is-open"));
+    });
+  });
+
   $("btn-locate").addEventListener("click", locateUser);
   $("btn-recalc").addEventListener("click", recalc);
   $("btn-leon").addEventListener("click", () => {
+    cancelLocateRequest("Búsqueda interrumpida. Se usarán coordenadas de León.", "ok");
     writeLat(42.5987);
     writeLon(-5.5671);
     $("in-alt").value = 838;

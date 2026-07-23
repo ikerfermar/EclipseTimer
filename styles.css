@@ -73,13 +73,72 @@ section {
   border-bottom: 1px solid var(--line);
 }
 
-.label {
+.section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.section-title {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.68rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #8b8779;
-  margin-bottom: 0.8rem;
+}
+
+.section-toggle-icon {
+  position: relative;
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 0.9rem;
+}
+
+.section-toggle-icon::before,
+.section-toggle-icon::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 0.9rem;
+  height: 1px;
+  background: var(--corona);
+  transform: translate(-50%, -50%);
+}
+
+.section-toggle-icon::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+  transition: transform 0.15s ease;
+}
+
+.accordion-section {
+  display: block;
+}
+
+.accordion-section .section-body {
+  padding-top: 0.95rem;
+}
+
+.accordion-section.is-open .section-toggle {
+  margin-bottom: 0;
+}
+
+.accordion-section.is-open .section-toggle-icon::after {
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+
+.accordion-section.is-collapsed .section-body {
+  display: none;
+}
+
+.accordion-section.is-collapsed .section-toggle-icon::after {
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 .loc-row {
@@ -264,6 +323,15 @@ body.kiosk #alerts-section,
 body.kiosk #test-section,
 body.kiosk footer {
   display: none !important;
+}
+
+body.kiosk .section-toggle {
+  display: none;
+}
+
+body.kiosk .section-body {
+  display: block !important;
+  padding-top: 0;
 }
 
 body.kiosk .wrap {
@@ -501,6 +569,20 @@ footer a {
   #alert-banner-text {
     font-size: 1.6rem !important;
   }
+}
+
+#btn-exit-kiosk {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(10px);
+  font-size: 0.72rem;
+  padding: 0.45rem 0.7rem;
+  min-height: 36px;
+}
+
+body.kiosk #btn-exit-kiosk {
+  top: auto !important;
+  right: 0.75rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
 }
 
 @media (max-width: 360px) {

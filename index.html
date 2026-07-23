@@ -20,8 +20,12 @@
     <h1>Eclipse total<br>12 agosto 2026</h1>
   </header>
 
-  <section id="loc-section">
-    <div class="label">Ubicacion</div>
+  <section id="loc-section" class="accordion-section is-open">
+    <button type="button" class="section-toggle" data-section="loc-section" aria-expanded="true" aria-controls="loc-section-body">
+      <span class="section-title">Ubicacion</span>
+      <span class="section-toggle-icon" aria-hidden="true"></span>
+    </button>
+    <div class="section-body" id="loc-section-body">
     <div class="loc-row">
       <button class="primary" id="btn-locate" aria-label="Obtener ubicacion GPS">Usar mi ubicacion</button>
       <button class="small" id="btn-recalc" aria-label="Recalcular con coordenadas actuales">Recalcular</button>
@@ -52,10 +56,15 @@
       </div>
     </div>
     <div class="coord-status" id="loc-status" aria-live="polite">Automatica o manual.</div>
+    </div>
   </section>
 
-  <section id="disk-section" style="display:none;">
-    <div class="label">Estado actual</div>
+  <section id="disk-section" class="accordion-section is-open" hidden>
+    <button type="button" class="section-toggle" data-section="disk-section" aria-expanded="true" aria-controls="disk-section-body">
+      <span class="section-title">Estado actual</span>
+      <span class="section-toggle-icon" aria-hidden="true"></span>
+    </button>
+    <div class="section-body" id="disk-section-body">
     <div class="disk-wrap">
       <svg id="disk-svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Visualizacion del estado del eclipse"></svg>
       <div class="phase-name" id="phase-name">-</div>
@@ -65,10 +74,15 @@
       </div>
       <div class="sun-geo" id="sun-geo">-</div>
     </div>
+    </div>
   </section>
 
-  <section id="countdown-section" style="display:none;">
-    <div class="label">Cuenta atras</div>
+  <section id="countdown-section" class="accordion-section is-open" hidden>
+    <button type="button" class="section-toggle" data-section="countdown-section" aria-expanded="true" aria-controls="countdown-section-body">
+      <span class="section-title">Cuenta atras</span>
+      <span class="section-toggle-icon" aria-hidden="true"></span>
+    </button>
+    <div class="section-body" id="countdown-section-body">
     <div class="countdown">
       <div class="next-label" id="cd-label">proximo contacto</div>
       <div class="clock" id="cd-clock">--:--:--</div>
@@ -77,16 +91,26 @@
     <div class="announce-row" style="justify-content:center; margin-top:1rem;">
       <button class="small" id="btn-fullscreen">Pantalla completa</button>
     </div>
+    </div>
   </section>
 
-  <section id="contacts-section" style="display:none;">
-    <div class="label">Contactos (CEST)</div>
+  <section id="contacts-section" class="accordion-section is-open" hidden>
+    <button type="button" class="section-toggle" data-section="contacts-section" aria-expanded="true" aria-controls="contacts-section-body">
+      <span class="section-title">Contactos (CEST)</span>
+      <span class="section-toggle-icon" aria-hidden="true"></span>
+    </button>
+    <div class="section-body" id="contacts-section-body">
     <div id="contacts-list"></div>
     <div class="duration-note" id="duration-note"></div>
+    </div>
   </section>
 
-  <section id="announce-section" style="display:none;">
-    <div class="label">Voz</div>
+  <section id="announce-section" class="accordion-section is-collapsed" hidden>
+    <button type="button" class="section-toggle" data-section="announce-section" aria-expanded="false" aria-controls="announce-section-body">
+      <span class="section-title">Voz</span>
+      <span class="section-toggle-icon" aria-hidden="true"></span>
+    </button>
+    <div class="section-body" id="announce-section-body" hidden>
     <div class="announce-row">
       <button id="btn-test-voice">Probar voz</button>
     </div>
@@ -94,22 +118,33 @@
       <input type="checkbox" id="chk-live-voice" checked style="width:20px; height:20px; accent-color:#e0ac5c;">
       Anunciar cada contacto al ocurrir
     </label>
+    </div>
   </section>
 
-  <section id="alerts-section" style="display:none;">
-    <div class="label">Avisos de filtro</div>
+  <section id="alerts-section" class="accordion-section is-collapsed" hidden>
+    <button type="button" class="section-toggle" data-section="alerts-section" aria-expanded="false" aria-controls="alerts-section-body">
+      <span class="section-title">Avisos de filtro</span>
+      <span class="section-toggle-icon" aria-hidden="true"></span>
+    </button>
+    <div class="section-body" id="alerts-section-body" hidden>
     <div class="contact" style="border-top:none;"><div class="tag" style="color:#e0ac5c;">-30s</div><div class="desc">Mano al filtro</div><div></div></div>
     <div class="contact"><div class="tag" style="color:#5f7a5e;">-20s</div><div class="desc">Quita el filtro</div><div></div></div>
     <div class="contact"><div class="tag" style="color:#9c4632;">-10s</div><div class="desc">Pon el filtro</div><div></div></div>
+    </div>
   </section>
 
-  <section id="test-section">
-    <div class="label">Modo de prueba</div>
+  <section id="test-section" class="accordion-section is-collapsed" hidden>
+    <button type="button" class="section-toggle" data-section="test-section" aria-expanded="false" aria-controls="test-section-body">
+      <span class="section-title">Modo de prueba</span>
+      <span class="section-toggle-icon" aria-hidden="true"></span>
+    </button>
+    <div class="section-body" id="test-section-body" hidden>
     <div class="announce-row" style="align-items:center;">
       <button id="btn-test-start" class="primary">Iniciar prueba</button>
       <button id="btn-test-stop" class="small">Salir</button>
     </div>
     <div class="duration-note" id="test-status">Inactivo.</div>
+    </div>
   </section>
 
   <div id="alert-banner" style="display:none; position:fixed; inset:0; z-index:999; align-items:center; justify-content:center; text-align:center; padding:2rem; flex-direction:column; gap:.75rem; background:rgba(0,0,0,.95); color:#e9e6dd; border-top:6px solid #e0ac5c;" aria-live="assertive" aria-hidden="true">
