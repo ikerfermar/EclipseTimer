@@ -332,11 +332,12 @@ function locateUser() {
       state.locating = false;
       updateLocateButton();
 
-      if (err.code === 1) {
-        const safariHint = isLikelySafariIOS()
-          ? "Safari ha bloqueado la ubicación. Revisa Ajustes del sitio web > Ubicación > Permitir y recarga la página."
-          : "Bloqueada por el navegador. Usa coordenadas manuales o 'Usar León'.";
+      const safariHint = "Safari ha bloqueado la ubicación. Revisa Ajustes del sitio web > Ubicación > Permitir, comprueba Ajustes de iPhone > Privacidad y seguridad > Localización > Safari Websites y recarga la página.";
+
+      if (isLikelySafariIOS()) {
         setLocStatus(safariHint, "err");
+      } else if (err.code === 1) {
+        setLocStatus("Bloqueada por el navegador. Usa coordenadas manuales o 'Usar León'.", "err");
       } else {
         setLocStatus("No se pudo obtener la ubicación. Introduce coordenadas a mano.", "err");
       }
