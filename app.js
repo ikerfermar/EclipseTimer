@@ -68,6 +68,8 @@ let hiddenAtMs = null;
 let speechLastAtMs = 0;
 let speechQueue = [];
 let speechQueueBusy = false;
+let alertDisplayQueue = [];
+let alertDisplayActive = false;
 
 const SPEECH_MIN_GAP_MS = 900;
 const SPEECH_TEST_GAP_MS = 1400;
@@ -80,6 +82,15 @@ function clearSpeechQueue() {
   speechQueueBusy = false;
   if ("speechSynthesis" in window) {
     window.speechSynthesis.cancel();
+  }
+}
+
+function clearAlertDisplayQueue() {
+  alertDisplayQueue = [];
+  alertDisplayActive = false;
+  if (bannerTimeout) {
+    clearTimeout(bannerTimeout);
+    bannerTimeout = null;
   }
 }
 
@@ -282,6 +293,7 @@ function resetAlerts() {
   state.alertsFired = {};
   state.voiceFired = { c1: false, c2: false, c3: false, c4: false };
   clearSpeechQueue();
+  clearAlertDisplayQueue();
 }
 
 function setLocStatus(msg, cls) {
@@ -586,16 +598,18 @@ function pumpSpeechQueue() {
     return;
   }
 
+  const next = speechQueue[0];
+  if (!next) return;
+
   const now = performance.now();
-  const minGap = state.testMode ? SPEECH_TEST_GAP_MS : SPEECH_MIN_GAP_MS;
+  const minGap = next.noGap ? 0 : (state.testMode ? SPEECH_TEST_GAP_MS : SPEECH_MIN_GAP_MS);
   const wait = Math.max(0, speechLastAtMs + minGap - now);
   if (wait > 0) {
     setTimeout(pumpSpeechQueue, wait);
     return;
   }
 
-  const next = speechQueue.shift();
-  if (!next) return;
+  speechQueue.shift();
   if (next.interrupt) synth.cancel();
 
   const utterance = new SpeechSynthesisUtterance(next.text);
@@ -619,7 +633,8 @@ function speak(text, options = {}) {
 
   const entry = {
     text,
-    interrupt: !!options.interrupt
+    interrupt: !!options.interrupt,
+    noGap: !!options.noGap
   };
 
   if (options.priority === "high") {
@@ -644,6 +659,33 @@ function hideBanner() {
   const banner = $("alert-banner");
   banner.classList.remove("show");
   banner.setAttribute("aria-hidden", "true");
+}
+
+function renderAlertBanner(event) {
+  const banner = $("alert-banner");
+
+  $("alert-banner-tag").textContent = event.tag;
+  $("alert-banner-tag").style.color = event.color;
+  $("alert-banner-text").textContent = event.text;
+  banner.style.borderTopColor = event.color;
+  banner.style.display = "flex";
+  banner.classList.add("show");
+  banner.setAttribute("aria-hidden", "false");
+}
+
+function pumpAlertDisplayQueue() {
+  if (alertDisplayActive || !alertDisplayQueue.length) return;
+
+  const next = alertDisplayQueue.shift();
+  alertDisplayActive = true;
+  renderAlertBanner(next);
+
+  if (bannerTimeout) clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(() => {
+    hideBanner();
+    alertDisplayActive = false;
+    pumpAlertDisplayQueue();
+  }, next.quiet ? 1600 : 8000);
 }
 
 function fireAlert(tag, text, color, voiceText, beepFreq, beepTimes, vibratePattern) {
@@ -738,7 +780,7 @@ function buildTimedEvents(c) {
       });
     }
 
-    if (state.observationEnabled.glassesOff && !state.photoEnabled) {
+    if (state.observationEnabled.glassesOff) {
       addTimedEvent(events, "obs-glasses-off", c.c2, {
         tag: "Seguridad visual",
         text: "Puedes quitar gafas y filtro",
@@ -750,7 +792,7 @@ function buildTimedEvents(c) {
       });
     }
 
-    if (state.observationEnabled.glassesOn && !state.photoEnabled) {
+    if (state.observationEnabled.glassesOn) {
       addTimedEvent(events, "obs-glasses-on", c.c3 + 15 / 3600, {
         tag: "Seguridad visual",
         text: "Vuelve a poner gafas y filtro",
@@ -773,20 +815,6 @@ function buildTimedEvents(c) {
         vibrate: [100]
       });
 
-      for (let sec = 5; sec >= 1; sec -= 1) {
-        addTimedEvent(events, `photo-c2-count-${sec}`, c.c2 - sec / 3600, {
-          tag: "C2",
-          text: `Cuenta atras ${sec}`,
-          color: "#e0ac5c",
-          voice: String(sec),
-          beepFreq: 760,
-          beepTimes: 1,
-          vibrate: [50],
-          quiet: true,
-          speechPriority: "high"
-        });
-      }
-
       addTimedEvent(events, "photo-remove-filter", c.c2, {
         tag: "Fotografia",
         text: "Quita el filtro ahora",
@@ -797,26 +825,11 @@ function buildTimedEvents(c) {
         vibrate: [90, 80, 90]
       });
 
-      for (let sec = 5; sec >= 1; sec -= 1) {
-        const offsetSec = 15 - sec;
-        addTimedEvent(events, `photo-c3plus-count-${sec}`, c.c3 + offsetSec / 3600, {
-          tag: "C3",
-          text: `Cuenta atras ${sec}`,
-          color: "#9c4632",
-          voice: String(sec),
-          beepFreq: 620,
-          beepTimes: 1,
-          vibrate: [50],
-          quiet: true,
-          speechPriority: "high"
-        });
-      }
-
       addTimedEvent(events, "photo-filter-on", c.c3 + 15 / 3600, {
         tag: "Fotografia",
-        text: "Pon el filtro y las gafas ahora",
+        text: "Pon el filtro ahora",
         color: "#9c4632",
-        voice: "Pon el filtro y las gafas ahora.",
+        voice: "Pon el filtro ahora.",
         beepFreq: 440,
         beepTimes: 3,
         vibrate: [90, 80, 90, 80, 90]
@@ -828,26 +841,39 @@ function buildTimedEvents(c) {
 }
 
 function triggerTimedEvent(event) {
-  const banner = $("alert-banner");
-  const bannerMs = event.quiet ? 1600 : 8000;
-
-  $("alert-banner-tag").textContent = event.tag;
-  $("alert-banner-tag").style.color = event.color;
-  $("alert-banner-text").textContent = event.text;
-  banner.style.borderTopColor = event.color;
-  banner.style.display = "flex";
-  banner.classList.add("show");
-  banner.setAttribute("aria-hidden", "false");
-
   if (event.beepFreq && event.beepTimes) beep(event.beepFreq, event.beepTimes);
   if (event.vibrate && navigator.vibrate) navigator.vibrate(event.vibrate);
   notify(`Eclipse · ${event.tag}`, event.text);
   speak(event.voice, { interrupt: false, priority: event.speechPriority || "normal" });
 
-  if (bannerTimeout) clearTimeout(bannerTimeout);
-  bannerTimeout = setTimeout(() => {
-    hideBanner();
-  }, bannerMs);
+  if (event.quiet) return;
+  alertDisplayQueue.push(event);
+  pumpAlertDisplayQueue();
+}
+
+function triggerCountdownSpeech(key, sec, tag, color, freq) {
+  if (state.alertsFired[key]) return;
+  state.alertsFired[key] = true;
+
+  beep(freq, 1);
+  if (navigator.vibrate) navigator.vibrate([40]);
+  notify(`Eclipse · ${tag}`, `Cuenta atras ${sec}`);
+  speak(String(sec), { interrupt: false, priority: "high", noGap: true });
+}
+
+function checkSynchronizedCountdowns(t, c) {
+  if (!state.photoEnabled || c.c2 === null || c.c3 === null) return;
+
+  const c2Sec = Math.ceil((c.c2 - t) * 3600);
+  if (c2Sec >= 1 && c2Sec <= 5) {
+    triggerCountdownSpeech(`photo-c2-count-${c2Sec}`, c2Sec, "C2", "#e0ac5c", 760);
+  }
+
+  const c3Target = c.c3 + 15 / 3600;
+  const c3PlusSec = Math.ceil((c3Target - t) * 3600);
+  if (t >= c.c3 + 10 / 3600 && c3PlusSec >= 1 && c3PlusSec <= 5) {
+    triggerCountdownSpeech(`photo-c3plus-count-${c3PlusSec}`, c3PlusSec, "C3", "#9c4632", 620);
+  }
 }
 
 function checkAlerts(t, c) {
@@ -875,7 +901,14 @@ function checkVoiceAnnouncements(t, c) {
 
   voiceEvents.forEach((ev) => {
     const et = c[ev.key];
-    if (et !== null && !state.voiceFired[ev.key] && t >= et) {
+    if (et === null || state.voiceFired[ev.key]) return;
+
+    let announceAt = et;
+    if (ev.key === "c2" || ev.key === "c3") {
+      announceAt += 2 / 3600;
+    }
+
+    if (t >= announceAt) {
       state.voiceFired[ev.key] = true;
       speak(ev.text, { interrupt: false, priority: "normal" });
       notify(`Eclipse · ${ev.label}`, ev.text);
@@ -915,7 +948,7 @@ function initDiskNodes() {
   const corona = document.createElementNS(ns, "circle");
   corona.setAttribute("cx", "90");
   corona.setAttribute("cy", "90");
-  corona.setAttribute("r", String(60 * 1.6));
+  corona.setAttribute("r", String(60 * 1.45));
   corona.setAttribute("fill", "url(#corona)");
   corona.setAttribute("display", "none");
 
@@ -1014,6 +1047,7 @@ function tick() {
   const t = currentTUTC();
   const circ = circumstances(t, c.obs);
   checkAlerts(t, c);
+  checkSynchronizedCountdowns(t, c);
   checkVoiceAnnouncements(t, c);
 
   let phaseText = "Sin eclipse visible aquí";
@@ -1133,8 +1167,13 @@ function bindEvents() {
   });
 
   $("alert-banner-dismiss").addEventListener("click", () => {
-    if (bannerTimeout) clearTimeout(bannerTimeout);
+    if (bannerTimeout) {
+      clearTimeout(bannerTimeout);
+      bannerTimeout = null;
+    }
     hideBanner();
+    alertDisplayActive = false;
+    pumpAlertDisplayQueue();
   });
 
   $("btn-test-voice").addEventListener("click", () => {
@@ -1154,7 +1193,7 @@ function bindEvents() {
     state.testMode = true;
     state.testSpeed = 1;
     state.testStartReal = performance.now();
-    state.testStartVirtualT = c.c2 - 40 / 3600;
+    state.testStartVirtualT = c.c2 - 60 / 3600;
     resetAlerts();
     $("test-status").textContent = `En marcha ×${state.testSpeed}.`;
   });
