@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_VERSION = "eclipsetimer-v4";
+const CACHE_VERSION = "eclipsetimer-v13";
 const APP_SHELL = [
   "./",
   "index.html",

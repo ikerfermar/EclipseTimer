@@ -18,28 +18,10 @@ const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
 const UI_TICK_MS = 100;
 const PREFS_KEY = "eclipsetimer-alert-prefs-v1";
+const AUDIO_ADVANCE_SEC = 0.5;
+const AUDIO_ADVANCE_HOURS = AUDIO_ADVANCE_SEC / 3600;
 
 const $ = (id) => document.getElementById(id);
-
-const OBSERVATION_DEFAULTS = {
-  umbra: true,
-  bandsIn: true,
-  horizon: true,
-  tempAnimals: true,
-  bandsOut: true,
-  glassesOff: true,
-  glassesOn: true
-};
-
-const OBSERVATION_CONTROL_IDS = {
-  umbra: "obs-umbra",
-  bandsIn: "obs-bands-in",
-  horizon: "obs-horizon",
-  tempAnimals: "obs-temp-animals",
-  bandsOut: "obs-bands-out",
-  glassesOff: "obs-glasses-off",
-  glassesOn: "obs-glasses-on"
-};
 
 let state = {
   lat: null,
@@ -48,11 +30,11 @@ let state = {
   contacts: null,
   alertsFired: {},
   voiceFired: { c1: false, c2: false, c3: false, c4: false },
-  observationEnabled: { ...OBSERVATION_DEFAULTS },
   photoEnabled: true,
   testMode: false,
-  testStartReal: null,
+  testStartWallMs: null,
   testStartVirtualT: null,
+  prevTickTUTC: null,
   testSpeed: 1,
   locating: false,
   locationRequestId: 0
@@ -64,22 +46,15 @@ let rafId = null;
 let lastUiTick = 0;
 let sharedAudioCtx = null;
 let diskNodes = null;
-let hiddenAtMs = null;
-let speechLastAtMs = 0;
-let speechQueue = [];
-let speechQueueBusy = false;
 let alertDisplayQueue = [];
 let alertDisplayActive = false;
+let countdownFlashTimer = null;
 
-const SPEECH_MIN_GAP_MS = 900;
-const SPEECH_TEST_GAP_MS = 1400;
-const ALERT_MAX_LATE_SEC = 3;
+const ALERT_MAX_LATE_SEC = 0.9;
 const RESULT_SECTION_IDS = ["main-section", "alerts-section", "ops-section"];
 const COLLAPSIBLE_POST_LOCATION_IDS = ["alerts-section", "ops-section"];
 
 function clearSpeechQueue() {
-  speechQueue = [];
-  speechQueueBusy = false;
   if ("speechSynthesis" in window) {
     window.speechSynthesis.cancel();
   }
@@ -99,10 +74,6 @@ function loadAlertPrefs() {
     const raw = localStorage.getItem(PREFS_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    const obs = parsed.observationEnabled || {};
-    Object.keys(OBSERVATION_DEFAULTS).forEach((key) => {
-      if (typeof obs[key] === "boolean") state.observationEnabled[key] = obs[key];
-    });
     if (typeof parsed.photoEnabled === "boolean") {
       state.photoEnabled = parsed.photoEnabled;
     }
@@ -114,7 +85,6 @@ function loadAlertPrefs() {
 function saveAlertPrefs() {
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify({
-      observationEnabled: state.observationEnabled,
       photoEnabled: state.photoEnabled
     }));
   } catch (_) {
@@ -123,11 +93,6 @@ function saveAlertPrefs() {
 }
 
 function syncAlertControlsFromState() {
-  Object.entries(OBSERVATION_CONTROL_IDS).forEach(([key, id]) => {
-    const input = $(id);
-    if (input) input.checked = !!state.observationEnabled[key];
-  });
-
   const master = $("chk-photo-master");
   if (master) master.checked = state.photoEnabled;
   const photoSubsection = $("photo-subsection");
@@ -135,15 +100,6 @@ function syncAlertControlsFromState() {
 }
 
 function bindAlertControls() {
-  Object.entries(OBSERVATION_CONTROL_IDS).forEach(([key, id]) => {
-    const input = $(id);
-    if (!input) return;
-    input.addEventListener("change", () => {
-      state.observationEnabled[key] = !!input.checked;
-      saveAlertPrefs();
-    });
-  });
-
   const master = $("chk-photo-master");
   if (!master) return;
   master.addEventListener("change", () => {
@@ -292,6 +248,7 @@ function fmtMadrid(date) {
 function resetAlerts() {
   state.alertsFired = {};
   state.voiceFired = { c1: false, c2: false, c3: false, c4: false };
+  state.prevTickTUTC = null;
   clearSpeechQueue();
   clearAlertDisplayQueue();
 }
@@ -480,7 +437,7 @@ function recalc() {
   state.alt = alt;
   state.contacts = computeContacts(lat, lon, alt);
   state.testMode = false;
-  state.testStartReal = null;
+  state.testStartWallMs = null;
   state.testStartVirtualT = null;
   resetAlerts();
 
@@ -522,6 +479,7 @@ function renderContacts() {
       const geo = sunAltAz(r.t, state.lat, state.lon);
       const geoDiv = document.createElement("div");
       geoDiv.className = "contact-geo";
+      geoDiv.id = `geo-${r.tag}`;
       geoDiv.textContent = `${geo.alt.toFixed(0)}° alt · ${geo.az.toFixed(0)}° az`;
       list.appendChild(geoDiv);
     }
@@ -541,8 +499,8 @@ function renderContacts() {
 }
 
 function currentTUTC() {
-  if (state.testMode && state.testStartReal !== null) {
-    const elapsedRealSec = (performance.now() - state.testStartReal) / 1000;
+  if (state.testMode && state.testStartWallMs !== null) {
+    const elapsedRealSec = (Date.now() - state.testStartWallMs) / 1000;
     const elapsedVirtualHours = (elapsedRealSec * state.testSpeed) / 3600;
     return state.testStartVirtualT + elapsedVirtualHours;
   }
@@ -589,60 +547,21 @@ function beep(freq, times = 1) {
   }
 }
 
-function pumpSpeechQueue() {
-  if (speechQueueBusy || !speechQueue.length || !("speechSynthesis" in window)) return;
+function speak(text, options = {}) {
+  if (!("speechSynthesis" in window) || !text) return false;
 
   const synth = window.speechSynthesis;
-  if (synth.speaking || synth.pending) {
-    setTimeout(pumpSpeechQueue, 120);
-    return;
+  if (options.interrupt) {
+    synth.cancel();
+  } else if (synth.speaking || synth.pending) {
+    return false;
   }
 
-  const next = speechQueue[0];
-  if (!next) return;
-
-  const now = performance.now();
-  const minGap = next.noGap ? 0 : (state.testMode ? SPEECH_TEST_GAP_MS : SPEECH_MIN_GAP_MS);
-  const wait = Math.max(0, speechLastAtMs + minGap - now);
-  if (wait > 0) {
-    setTimeout(pumpSpeechQueue, wait);
-    return;
-  }
-
-  speechQueue.shift();
-  if (next.interrupt) synth.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(next.text);
+  const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "es-ES";
-  utterance.rate = 1.0;
-  speechQueueBusy = true;
-
-  const unlock = () => {
-    speechQueueBusy = false;
-    speechLastAtMs = performance.now();
-    setTimeout(pumpSpeechQueue, 20);
-  };
-
-  utterance.onend = unlock;
-  utterance.onerror = unlock;
+  utterance.rate = typeof options.rate === "number" ? options.rate : 1.0;
   synth.speak(utterance);
-}
-
-function speak(text, options = {}) {
-  if (!("speechSynthesis" in window)) return;
-
-  const entry = {
-    text,
-    interrupt: !!options.interrupt,
-    noGap: !!options.noGap
-  };
-
-  if (options.priority === "high") {
-    speechQueue.unshift(entry);
-  } else {
-    speechQueue.push(entry);
-  }
-  pumpSpeechQueue();
+  return true;
 }
 
 function notify(title, body) {
@@ -659,6 +578,45 @@ function hideBanner() {
   const banner = $("alert-banner");
   banner.classList.remove("show");
   banner.setAttribute("aria-hidden", "true");
+}
+
+function showCountdownFlash(num, color) {
+  let flash = $("countdown-flash");
+  if (!flash) {
+    flash = document.createElement("div");
+    flash.id = "countdown-flash";
+    flash.style.position = "fixed";
+    flash.style.left = "50%";
+    flash.style.top = "30%";
+    flash.style.transform = "translate(-50%, -50%)";
+    flash.style.zIndex = "1500";
+    flash.style.minWidth = "72px";
+    flash.style.padding = "0.5rem 0.8rem";
+    flash.style.textAlign = "center";
+    flash.style.fontFamily = "Consolas, 'Courier New', monospace";
+    flash.style.fontSize = "2.1rem";
+    flash.style.fontWeight = "700";
+    flash.style.border = "2px solid #e0ac5c";
+    flash.style.borderRadius = "6px";
+    flash.style.background = "rgba(0, 0, 0, 0.86)";
+    flash.style.color = "#e9e6dd";
+    flash.style.opacity = "0";
+    flash.style.pointerEvents = "none";
+    flash.style.transition = "opacity 0.12s ease";
+    document.body.appendChild(flash);
+  }
+
+  flash.style.borderColor = color;
+  flash.style.color = color;
+  flash.textContent = String(num);
+  flash.style.opacity = "1";
+
+  if (countdownFlashTimer) {
+    clearTimeout(countdownFlashTimer);
+  }
+  countdownFlashTimer = setTimeout(() => {
+    flash.style.opacity = "0";
+  }, 560);
 }
 
 function renderAlertBanner(event) {
@@ -685,7 +643,7 @@ function pumpAlertDisplayQueue() {
     hideBanner();
     alertDisplayActive = false;
     pumpAlertDisplayQueue();
-  }, next.quiet ? 1600 : 8000);
+  }, next.quiet ? 900 : 4200);
 }
 
 function fireAlert(tag, text, color, voiceText, beepFreq, beepTimes, vibratePattern) {
@@ -718,118 +676,68 @@ function buildTimedEvents(c) {
   const events = [];
 
   if (c.c2 !== null && c.c3 !== null) {
-    const midTotality = c.c2 + (c.c3 - c.c2) / 2;
+    addTimedEvent(events, "c2-minus-60", c.c2 - 60 / 3600, {
+      tag: "Aviso",
+      text: "Falta 1 minuto para C2",
+      color: "#e0ac5c",
+      voice: "Falta un minuto para C2.",
+      beepFreq: 760,
+      beepTimes: 1,
+      vibrate: [100]
+    });
 
-    if (state.observationEnabled.umbra) {
-      addTimedEvent(events, "obs-umbra", c.c2 - 60 / 3600, {
-        tag: "Observacion",
-        text: "Llega la umbra en un minuto",
-        color: "#e0ac5c",
-        voice: "Atencion. La umbra llega en un minuto.",
-        beepFreq: 760,
-        beepTimes: 1,
-        vibrate: [100]
-      });
-    }
+    addTimedEvent(events, "glasses-off", c.c2, {
+      tag: "Seguridad visual",
+      text: "Puedes quitar las gafas",
+      color: "#5f7a5e",
+      voice: "Contacto dos. Comienza la totalidad, puedes quitar las gafas.",
+      combineWithContact: true,
+      forceVoice: true,
+      beepFreq: 660,
+      beepTimes: 2,
+      vibrate: [90, 80, 90]
+    });
 
-    if (state.observationEnabled.bandsIn) {
-      addTimedEvent(events, "obs-bands-in", c.c2 - 25 / 3600, {
-        tag: "Observacion",
-        text: "Busca bandas de sombra en superficies claras",
-        color: "#e0ac5c",
-        voice: "Atencion. Bandas de sombra en breve.",
-        beepFreq: 720,
-        beepTimes: 1,
-        vibrate: [80]
-      });
-    }
-
-    if (state.observationEnabled.horizon) {
-      addTimedEvent(events, "obs-horizon", c.c2 + 5 / 3600, {
-        tag: "Observacion",
-        text: "Observa el resplandor de 360 grados en el horizonte",
-        color: "#5f7a5e",
-        voice: "Observa ahora el brillo de trescientos sesenta grados en el horizonte.",
-        beepFreq: 640,
-        beepTimes: 1,
-        vibrate: [70]
-      });
-    }
-
-    if (state.observationEnabled.tempAnimals) {
-      addTimedEvent(events, "obs-temp-animals", midTotality, {
-        tag: "Observacion",
-        text: "Fijate en temperatura, viento y comportamiento animal",
-        color: "#5f7a5e",
-        voice: "Mitad de la totalidad. Fijate en temperatura, viento y comportamiento animal.",
-        beepFreq: 620,
-        beepTimes: 1,
-        vibrate: [70]
-      });
-    }
-
-    if (state.observationEnabled.bandsOut) {
-      addTimedEvent(events, "obs-bands-out", c.c3 + 10 / 3600, {
-        tag: "Observacion",
-        text: "Bandas de sombra de salida",
-        color: "#e0ac5c",
-        voice: "Atencion. Posibles bandas de sombra de salida.",
-        beepFreq: 710,
-        beepTimes: 1,
-        vibrate: [80]
-      });
-    }
-
-    if (state.observationEnabled.glassesOff) {
-      addTimedEvent(events, "obs-glasses-off", c.c2, {
-        tag: "Seguridad visual",
-        text: "Puedes quitar gafas y filtro",
-        color: "#5f7a5e",
-        voice: "Comienza la totalidad. Puedes quitar gafas y filtro solar.",
-        beepFreq: 660,
-        beepTimes: 2,
-        vibrate: [90, 80, 90]
-      });
-    }
-
-    if (state.observationEnabled.glassesOn) {
-      addTimedEvent(events, "obs-glasses-on", c.c3 + 15 / 3600, {
-        tag: "Seguridad visual",
-        text: "Vuelve a poner gafas y filtro",
-        color: "#9c4632",
-        voice: "Vuelve a poner gafas y filtro ahora.",
-        beepFreq: 460,
-        beepTimes: 2,
-        vibrate: [90, 80, 90]
-      });
-    }
+    addTimedEvent(events, "glasses-on", c.c3, {
+      tag: "Seguridad visual",
+      text: "Vuelve a poner las gafas",
+      color: "#9c4632",
+      voice: "Contacto tres. Termina la totalidad, vuelve a poner las gafas.",
+      combineWithContact: true,
+      forceVoice: true,
+      beepFreq: 460,
+      beepTimes: 2,
+      vibrate: [90, 80, 90]
+    });
 
     if (state.photoEnabled) {
       addTimedEvent(events, "photo-hand", c.c2 - 40 / 3600, {
-        tag: "Fotografia",
+        tag: "Aviso",
         text: "Mano al filtro",
         color: "#e0ac5c",
-        voice: "Fotografia. Mano al filtro.",
+        voice: "Mano al filtro.",
         beepFreq: 860,
         beepTimes: 1,
         vibrate: [100]
       });
 
-      addTimedEvent(events, "photo-remove-filter", c.c2, {
-        tag: "Fotografia",
+      addTimedEvent(events, "photo-remove-filter", c.c2 - 20 / 3600, {
+        tag: "Aviso",
         text: "Quita el filtro ahora",
         color: "#5f7a5e",
         voice: "Quita el filtro ahora.",
+        forceVoice: true,
         beepFreq: 680,
         beepTimes: 2,
         vibrate: [90, 80, 90]
       });
 
       addTimedEvent(events, "photo-filter-on", c.c3 + 15 / 3600, {
-        tag: "Fotografia",
+        tag: "Aviso",
         text: "Pon el filtro ahora",
         color: "#9c4632",
         voice: "Pon el filtro ahora.",
+        forceVoice: true,
         beepFreq: 440,
         beepTimes: 3,
         vibrate: [90, 80, 90, 80, 90]
@@ -844,7 +752,10 @@ function triggerTimedEvent(event) {
   if (event.beepFreq && event.beepTimes) beep(event.beepFreq, event.beepTimes);
   if (event.vibrate && navigator.vibrate) navigator.vibrate(event.vibrate);
   notify(`Eclipse · ${event.tag}`, event.text);
-  speak(event.voice, { interrupt: false, priority: event.speechPriority || "normal" });
+
+  if (event.voice && !event.combineWithContact) {
+    speak(event.voice, { interrupt: !!event.forceVoice });
+  }
 
   if (event.quiet) return;
   alertDisplayQueue.push(event);
@@ -857,31 +768,47 @@ function triggerCountdownSpeech(key, sec, tag, color, freq) {
 
   beep(freq, 1);
   if (navigator.vibrate) navigator.vibrate([40]);
-  notify(`Eclipse · ${tag}`, `Cuenta atras ${sec}`);
-  speak(String(sec), { interrupt: false, priority: "high", noGap: true });
+  showCountdownFlash(sec, color);
 }
 
 function checkSynchronizedCountdowns(t, c) {
-  if (!state.photoEnabled || c.c2 === null || c.c3 === null) return;
+  if (c.c2 === null || c.c3 === null) return;
 
-  const c2Sec = Math.ceil((c.c2 - t) * 3600);
-  if (c2Sec >= 1 && c2Sec <= 5) {
+  const tAudio = t + AUDIO_ADVANCE_HOURS;
+
+  const c2ContactSec = Math.ceil((c.c2 - tAudio) * 3600);
+  if (tAudio >= c.c2 - 10 / 3600 && c2ContactSec >= 1 && c2ContactSec <= 10) {
+    triggerCountdownSpeech(`core-c2-count-${c2ContactSec}`, c2ContactSec, "C2", "#e0ac5c", 740);
+  }
+
+  const c3ContactSec = Math.ceil((c.c3 - tAudio) * 3600);
+  if (tAudio >= c.c3 - 10 / 3600 && c3ContactSec >= 1 && c3ContactSec <= 10) {
+    triggerCountdownSpeech(`core-c3-count-${c3ContactSec}`, c3ContactSec, "C3", "#9c4632", 600);
+  }
+
+  if (!state.photoEnabled) return;
+
+  const c2FilterTarget = c.c2 - 20 / 3600;
+  const c2Sec = Math.ceil((c2FilterTarget - tAudio) * 3600);
+  if (tAudio >= c.c2 - 25 / 3600 && c2Sec >= 1 && c2Sec <= 5) {
     triggerCountdownSpeech(`photo-c2-count-${c2Sec}`, c2Sec, "C2", "#e0ac5c", 760);
   }
 
   const c3Target = c.c3 + 15 / 3600;
-  const c3PlusSec = Math.ceil((c3Target - t) * 3600);
-  if (t >= c.c3 + 10 / 3600 && c3PlusSec >= 1 && c3PlusSec <= 5) {
+  const c3PlusSec = Math.ceil((c3Target - tAudio) * 3600);
+  if (tAudio >= c.c3 + 10 / 3600 && c3PlusSec >= 1 && c3PlusSec <= 5) {
     triggerCountdownSpeech(`photo-c3plus-count-${c3PlusSec}`, c3PlusSec, "C3", "#9c4632", 620);
   }
 }
 
-function checkAlerts(t, c) {
+function checkAlerts(t, prevT, c) {
   const events = buildTimedEvents(c);
   events.forEach((event) => {
-    if (!state.alertsFired[event.key] && t >= event.time) {
+    const triggerAt = event.time - AUDIO_ADVANCE_HOURS;
+    const crossed = prevT === null ? t >= triggerAt : (prevT < triggerAt && t >= triggerAt);
+    if (!state.alertsFired[event.key] && crossed) {
       state.alertsFired[event.key] = true;
-      const lateSec = (t - event.time) * 3600;
+      const lateSec = (t - triggerAt) * 3600;
       if (lateSec <= ALERT_MAX_LATE_SEC) {
         triggerTimedEvent(event);
       }
@@ -889,13 +816,11 @@ function checkAlerts(t, c) {
   });
 }
 
-function checkVoiceAnnouncements(t, c) {
-  if (!$("chk-live-voice").checked) return;
-
+function checkVoiceAnnouncements(t, prevT, c) {
   const voiceEvents = [
     { key: "c1", label: "C1", text: "Contacto uno. Comienza la fase parcial." },
-    { key: "c2", label: "C2", text: "Contacto dos. Comienza la totalidad." },
-    { key: "c3", label: "C3", text: "Contacto tres. Termina la totalidad." },
+    { key: "c2", label: "C2", text: "Contacto dos. Comienza la totalidad, puedes quitar las gafas." },
+    { key: "c3", label: "C3", text: "Contacto tres. Termina la totalidad, vuelve a poner las gafas." },
     { key: "c4", label: "C4", text: "Contacto cuatro. Termina el eclipse." }
   ];
 
@@ -903,14 +828,11 @@ function checkVoiceAnnouncements(t, c) {
     const et = c[ev.key];
     if (et === null || state.voiceFired[ev.key]) return;
 
-    let announceAt = et;
-    if (ev.key === "c2" || ev.key === "c3") {
-      announceAt += 2 / 3600;
-    }
-
-    if (t >= announceAt) {
+    const triggerAt = et - AUDIO_ADVANCE_HOURS;
+    const crossed = prevT === null ? false : (prevT < triggerAt && t >= triggerAt);
+    if (crossed) {
       state.voiceFired[ev.key] = true;
-      speak(ev.text, { interrupt: false, priority: "normal" });
+      speak(ev.text, { interrupt: true, rate: 1.05 });
       notify(`Eclipse · ${ev.label}`, ev.text);
     }
   });
@@ -1027,16 +949,22 @@ function updateActiveRows(t, c) {
   ["C1", "C2", "C3", "C4"].forEach((tag) => {
     const row = $(`row-${tag}`);
     if (row) row.classList.remove("active");
+    const geo = $(`geo-${tag}`);
+    if (geo) geo.classList.remove("active");
   });
 
   if (c.c1 !== null && c.c2 !== null && t >= c.c1 && t < c.c2) {
     $("row-C1")?.classList.add("active");
+    $("geo-C1")?.classList.add("active");
   } else if (c.c2 !== null && c.c3 !== null && t >= c.c2 && t <= c.c3) {
     $("row-C2")?.classList.add("active");
+    $("geo-C2")?.classList.add("active");
   } else if (c.c3 !== null && c.c4 !== null && t > c.c3 && t <= c.c4) {
     $("row-C3")?.classList.add("active");
+    $("geo-C3")?.classList.add("active");
   } else if (c.c4 !== null && t > c.c4) {
     $("row-C4")?.classList.add("active");
+    $("geo-C4")?.classList.add("active");
   }
 }
 
@@ -1045,10 +973,11 @@ function tick() {
   if (!c) return;
 
   const t = currentTUTC();
+  const prevT = state.prevTickTUTC;
   const circ = circumstances(t, c.obs);
-  checkAlerts(t, c);
+  checkAlerts(t, prevT, c);
   checkSynchronizedCountdowns(t, c);
-  checkVoiceAnnouncements(t, c);
+  checkVoiceAnnouncements(t, prevT, c);
 
   let phaseText = "Sin eclipse visible aquí";
   let fraction = 0;
@@ -1088,6 +1017,7 @@ function tick() {
 
   updateCountdown(t, c);
   updateActiveRows(t, c);
+  state.prevTickTUTC = t;
 }
 
 function startLoop() {
@@ -1154,14 +1084,8 @@ function bindEvents() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      if (state.testMode && hiddenAtMs !== null) {
-        const hiddenDuration = performance.now() - hiddenAtMs;
-        state.testStartReal += hiddenDuration;
-        hiddenAtMs = null;
-      }
       if (state.contacts) acquireWakeLock();
     } else {
-      if (state.testMode) hiddenAtMs = performance.now();
       releaseWakeLock();
     }
   });
@@ -1192,15 +1116,15 @@ function bindEvents() {
     }
     state.testMode = true;
     state.testSpeed = 1;
-    state.testStartReal = performance.now();
-    state.testStartVirtualT = c.c2 - 60 / 3600;
+    state.testStartWallMs = Date.now();
+    state.testStartVirtualT = c.c2 - 70 / 3600;
     resetAlerts();
     $("test-status").textContent = `En marcha ×${state.testSpeed}.`;
   });
 
   $("btn-test-stop").addEventListener("click", () => {
     state.testMode = false;
-    state.testStartReal = null;
+    state.testStartWallMs = null;
     state.testStartVirtualT = null;
     resetAlerts();
     $("test-status").textContent = "Inactivo.";

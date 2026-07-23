@@ -100,84 +100,22 @@
 
   <section id="alerts-section" class="accordion-section is-collapsed" hidden>
     <button type="button" class="section-toggle" data-section="alerts-section" aria-expanded="false" aria-controls="alerts-section-body">
-      <span class="section-title">Avisos de observacion y fotografia</span>
+      <span class="section-title">Avisos de fotografía</span>
       <span class="section-toggle-icon" aria-hidden="true"></span>
     </button>
     <div class="section-body" id="alerts-section-body" hidden>
-      <div class="alerts-subsection">
-        <div class="section-title">Observacion</div>
-        <div class="alerts-note">Activa o desactiva avisos de voz por fenomeno.</div>
-
-        <label class="alerts-row" for="obs-umbra">
-          <input type="checkbox" id="obs-umbra" checked>
-          <span class="alerts-row-main">
-            <span class="alerts-row-title">Llegada de la umbra</span>
-            <span class="alerts-row-time">C2 - 60s</span>
-          </span>
-        </label>
-
-        <label class="alerts-row" for="obs-bands-in">
-          <input type="checkbox" id="obs-bands-in" checked>
-          <span class="alerts-row-main">
-            <span class="alerts-row-title">Bandas de sombra (entrada)</span>
-            <span class="alerts-row-time">C2 - 25s</span>
-          </span>
-        </label>
-
-        <label class="alerts-row" for="obs-horizon">
-          <input type="checkbox" id="obs-horizon" checked>
-          <span class="alerts-row-main">
-            <span class="alerts-row-title">Brillo 360° del horizonte</span>
-            <span class="alerts-row-time">C2 + 5s</span>
-          </span>
-        </label>
-
-        <label class="alerts-row" for="obs-temp-animals">
-          <input type="checkbox" id="obs-temp-animals" checked>
-          <span class="alerts-row-main">
-            <span class="alerts-row-title">Temperatura y comportamiento animal</span>
-            <span class="alerts-row-time">Mitad de la totalidad</span>
-          </span>
-        </label>
-
-        <label class="alerts-row" for="obs-bands-out">
-          <input type="checkbox" id="obs-bands-out" checked>
-          <span class="alerts-row-main">
-            <span class="alerts-row-title">Bandas de sombra (salida)</span>
-            <span class="alerts-row-time">C3 + 10s</span>
-          </span>
-        </label>
-
-        <label class="alerts-row" for="obs-glasses-off">
-          <input type="checkbox" id="obs-glasses-off" checked>
-          <span class="alerts-row-main">
-            <span class="alerts-row-title">Se pueden quitar gafas/filtro</span>
-            <span class="alerts-row-time">C2</span>
-          </span>
-        </label>
-
-        <label class="alerts-row" for="obs-glasses-on">
-          <input type="checkbox" id="obs-glasses-on" checked>
-          <span class="alerts-row-main">
-            <span class="alerts-row-title">Volver a poner gafas/filtro</span>
-            <span class="alerts-row-time">C3 + 15s</span>
-          </span>
-        </label>
-
-        <div class="alerts-glasses-note">Recomendacion de seguridad visual sincronizada con C2 y C3.</div>
-      </div>
-
       <div class="alerts-subsection" id="photo-subsection">
         <label class="alerts-master-toggle" for="chk-photo-master">
           <input type="checkbox" id="chk-photo-master" checked>
-          <span>Fotografia activa</span>
+          <span>Avisos de fotografía</span>
         </label>
 
         <div id="photo-events" class="alerts-events">
-          <div class="section-title">Fotografia</div>
+          <div class="section-title">Fotografía y seguridad</div>
           <div class="alerts-mini-row"><span class="alerts-row-time">C2 - 40s</span><span class="alerts-row-title">Mano al filtro</span></div>
-          <div class="alerts-mini-row"><span class="alerts-row-time">C2 - 5..1</span><span class="alerts-row-title">Cuenta atras para quitar filtro</span></div>
-          <div class="alerts-mini-row"><span class="alerts-row-time">C3 + 10..14</span><span class="alerts-row-title">Cuenta atras para volver a poner filtro</span></div>
+          <div class="alerts-mini-row"><span class="alerts-row-time">C2 - 25..21</span><span class="alerts-row-title">Cuenta atrás para quitar filtro</span></div>
+          <div class="alerts-mini-row"><span class="alerts-row-time">C2 - 20s</span><span class="alerts-row-title">Quita el filtro ahora</span></div>
+          <div class="alerts-mini-row"><span class="alerts-row-time">C3 + 10..14</span><span class="alerts-row-title">Cuenta atrás para poner filtro</span></div>
           <div class="alerts-mini-row"><span class="alerts-row-time">C3 + 15s</span><span class="alerts-row-title">Pon el filtro ahora</span></div>
         </div>
       </div>
@@ -194,13 +132,9 @@
       <div class="announce-row">
         <button id="btn-test-voice">Probar voz</button>
       </div>
-      <label style="display:flex; align-items:center; gap:.6rem; font-size:.82rem; margin-top:1rem; cursor:pointer;">
-        <input type="checkbox" id="chk-live-voice" checked style="width:20px; height:20px; accent-color:#e0ac5c;">
-        Anunciar cada contacto al ocurrir
-      </label>
 
       <div id="test-section" class="stack-block stack-block-tight">
-        <div class="section-title">Prueba rapida</div>
+        <div class="section-title">Prueba rápida</div>
         <div class="announce-row" style="align-items:center;">
           <button id="btn-test-start" class="primary">Iniciar prueba</button>
           <button id="btn-test-stop" class="small">Salir</button>
