@@ -59,65 +59,64 @@
     </div>
   </section>
 
-  <section id="disk-section" class="accordion-section is-open" hidden>
-    <button type="button" class="section-toggle" data-section="disk-section" aria-expanded="true" aria-controls="disk-section-body">
-      <span class="section-title">Estado actual</span>
-      <span class="section-toggle-icon" aria-hidden="true"></span>
-    </button>
-    <div class="section-body" id="disk-section-body">
-    <div class="disk-wrap">
-      <svg id="disk-svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Visualizacion del estado del eclipse"></svg>
-      <div class="phase-name" id="phase-name">-</div>
-      <div class="mag-readout">
-        <div class="num" id="mag-num">0%</div>
-        <div class="unit">obscuracion</div>
+  <section id="main-section" hidden>
+    <div class="section-title section-title-static">Seguimiento</div>
+
+    <div id="disk-section" class="stack-block">
+      <div class="section-title">Estado actual</div>
+      <div class="disk-wrap">
+        <svg id="disk-svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Visualizacion del estado del eclipse"></svg>
+        <div class="phase-name" id="phase-name">-</div>
+        <div class="mag-readout">
+          <div class="num" id="mag-num">0%</div>
+          <div class="unit">obscuracion</div>
+        </div>
+        <div class="sun-geo" id="sun-geo">-</div>
       </div>
-      <div class="sun-geo" id="sun-geo">-</div>
     </div>
+
+    <div id="countdown-section" class="stack-block">
+      <div class="section-title">Cuenta atras</div>
+      <div class="countdown">
+        <div class="next-label" id="cd-label">proximo contacto</div>
+        <div class="clock" id="cd-clock">--:--:--</div>
+        <div class="event-name" id="cd-event">-</div>
+      </div>
+      <div class="announce-row" style="justify-content:center; margin-top:1rem;">
+        <button class="small" id="btn-fullscreen">Pantalla completa</button>
+      </div>
+    </div>
+
+    <div id="contacts-section" class="stack-block">
+      <div class="section-title">Contactos (CEST)</div>
+      <div id="contacts-list"></div>
+      <div class="duration-note" id="duration-note"></div>
     </div>
   </section>
 
-  <section id="countdown-section" class="accordion-section is-open" hidden>
-    <button type="button" class="section-toggle" data-section="countdown-section" aria-expanded="true" aria-controls="countdown-section-body">
-      <span class="section-title">Cuenta atras</span>
+  <section id="ops-section" class="accordion-section is-collapsed" hidden>
+    <button type="button" class="section-toggle" data-section="ops-section" aria-expanded="false" aria-controls="ops-section-body">
+      <span class="section-title">Voz y modo de prueba</span>
       <span class="section-toggle-icon" aria-hidden="true"></span>
     </button>
-    <div class="section-body" id="countdown-section-body">
-    <div class="countdown">
-      <div class="next-label" id="cd-label">proximo contacto</div>
-      <div class="clock" id="cd-clock">--:--:--</div>
-      <div class="event-name" id="cd-event">-</div>
-    </div>
-    <div class="announce-row" style="justify-content:center; margin-top:1rem;">
-      <button class="small" id="btn-fullscreen">Pantalla completa</button>
-    </div>
-    </div>
-  </section>
+    <div class="section-body" id="ops-section-body" hidden>
+      <div class="section-title">Voz</div>
+      <div class="announce-row">
+        <button id="btn-test-voice">Probar voz</button>
+      </div>
+      <label style="display:flex; align-items:center; gap:.6rem; font-size:.82rem; margin-top:1rem; cursor:pointer;">
+        <input type="checkbox" id="chk-live-voice" checked style="width:20px; height:20px; accent-color:#e0ac5c;">
+        Anunciar cada contacto al ocurrir
+      </label>
 
-  <section id="contacts-section" class="accordion-section is-open" hidden>
-    <button type="button" class="section-toggle" data-section="contacts-section" aria-expanded="true" aria-controls="contacts-section-body">
-      <span class="section-title">Contactos (CEST)</span>
-      <span class="section-toggle-icon" aria-hidden="true"></span>
-    </button>
-    <div class="section-body" id="contacts-section-body">
-    <div id="contacts-list"></div>
-    <div class="duration-note" id="duration-note"></div>
-    </div>
-  </section>
-
-  <section id="announce-section" class="accordion-section is-collapsed" hidden>
-    <button type="button" class="section-toggle" data-section="announce-section" aria-expanded="false" aria-controls="announce-section-body">
-      <span class="section-title">Voz</span>
-      <span class="section-toggle-icon" aria-hidden="true"></span>
-    </button>
-    <div class="section-body" id="announce-section-body" hidden>
-    <div class="announce-row">
-      <button id="btn-test-voice">Probar voz</button>
-    </div>
-    <label style="display:flex; align-items:center; gap:.6rem; font-size:.82rem; margin-top:1rem; cursor:pointer;">
-      <input type="checkbox" id="chk-live-voice" checked style="width:20px; height:20px; accent-color:#e0ac5c;">
-      Anunciar cada contacto al ocurrir
-    </label>
+      <div id="test-section" class="stack-block stack-block-tight">
+        <div class="section-title">Modo de prueba</div>
+        <div class="announce-row" style="align-items:center;">
+          <button id="btn-test-start" class="primary">Iniciar prueba</button>
+          <button id="btn-test-stop" class="small">Salir</button>
+        </div>
+        <div class="duration-note" id="test-status">Inactivo.</div>
+      </div>
     </div>
   </section>
 
@@ -130,20 +129,6 @@
     <div class="contact" style="border-top:none;"><div class="tag" style="color:#e0ac5c;">-30s</div><div class="desc">Mano al filtro</div><div></div></div>
     <div class="contact"><div class="tag" style="color:#5f7a5e;">-20s</div><div class="desc">Quita el filtro</div><div></div></div>
     <div class="contact"><div class="tag" style="color:#9c4632;">-10s</div><div class="desc">Pon el filtro</div><div></div></div>
-    </div>
-  </section>
-
-  <section id="test-section" class="accordion-section is-collapsed" hidden>
-    <button type="button" class="section-toggle" data-section="test-section" aria-expanded="false" aria-controls="test-section-body">
-      <span class="section-title">Modo de prueba</span>
-      <span class="section-toggle-icon" aria-hidden="true"></span>
-    </button>
-    <div class="section-body" id="test-section-body" hidden>
-    <div class="announce-row" style="align-items:center;">
-      <button id="btn-test-start" class="primary">Iniciar prueba</button>
-      <button id="btn-test-stop" class="small">Salir</button>
-    </div>
-    <div class="duration-note" id="test-status">Inactivo.</div>
     </div>
   </section>
 
