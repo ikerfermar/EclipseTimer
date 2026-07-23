@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --ink: #000000;
   --paper: #e9e6dd;
   --paper-dim: #d9d5c8;
@@ -29,7 +29,7 @@ body {
 body {
   background-color: #000000;
   color: var(--paper);
-  font-family: "IBM Plex Sans", sans-serif;
+  font-family: "Segoe UI", "Noto Sans", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   display: flex;
   flex-direction: column;
@@ -69,7 +69,7 @@ header {
 }
 
 .eyebrow {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 0.7rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -78,7 +78,7 @@ header {
 }
 
 h1 {
-  font-family: "Source Serif 4", serif;
+  font-family: "Georgia", "Times New Roman", serif;
   font-weight: 600;
   font-size: 1.7rem;
   line-height: 1.2;
@@ -111,7 +111,7 @@ section {
 }
 
 .section-title {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 0.68rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -250,7 +250,7 @@ button.secondary {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.7rem 1rem;
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
 }
 
 .coord-field {
@@ -272,7 +272,7 @@ button.secondary {
 }
 
 .hemi-toggle {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--corona);
@@ -289,7 +289,7 @@ button.secondary {
   border: none;
   border-bottom: 1px solid var(--line-light);
   color: var(--paper);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 1rem;
   padding: 0.5rem 0;
 }
@@ -327,7 +327,7 @@ svg {
 }
 
 .mag-readout {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   text-align: center;
 }
 
@@ -344,7 +344,7 @@ svg {
 }
 
 .phase-name {
-  font-family: "Source Serif 4", serif;
+  font-family: "Georgia", "Times New Roman", serif;
   font-size: 1.05rem;
   text-align: center;
   color: var(--corona);
@@ -352,7 +352,7 @@ svg {
 }
 
 .sun-geo {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 0.72rem;
   color: #8b8779;
   text-align: center;
@@ -360,7 +360,7 @@ svg {
 
 .contact-geo {
   grid-column: 1 / -1;
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 0.68rem;
   color: #6b6759;
   margin-top: -0.35rem;
@@ -527,7 +527,7 @@ body.kiosk .contact .desc {
 }
 
 .countdown .next-label {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 0.7rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -535,7 +535,7 @@ body.kiosk .contact .desc {
 }
 
 .countdown .clock {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 2.8rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -544,7 +544,7 @@ body.kiosk .contact .desc {
 }
 
 .countdown .event-name {
-  font-family: "Source Serif 4", serif;
+  font-family: "Georgia", "Times New Roman", serif;
   font-size: 1rem;
   color: var(--paper);
 }
@@ -563,7 +563,7 @@ body.kiosk .contact .desc {
 }
 
 .contact .tag {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 0.75rem;
   color: var(--corona);
 }
@@ -574,7 +574,7 @@ body.kiosk .contact .desc {
 }
 
 .contact .time {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 1.15rem;
   font-variant-numeric: tabular-nums;
 }
@@ -591,8 +591,96 @@ body.kiosk .contact .desc {
   border-radius: 2px;
 }
 
+.alerts-subsection {
+  border-top: 1px solid var(--line);
+  padding-top: 0.95rem;
+  margin-top: 0.9rem;
+}
+
+.alerts-subsection:first-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.alerts-note,
+.alerts-glasses-note {
+  font-size: 0.76rem;
+  color: #8b8779;
+  margin-top: 0.45rem;
+  line-height: 1.45;
+}
+
+.alerts-glasses-note {
+  margin-top: 0.75rem;
+  color: #a8a49a;
+}
+
+.alerts-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.7rem;
+  cursor: pointer;
+}
+
+.alerts-row input[type="checkbox"],
+.alerts-master-toggle input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--corona);
+}
+
+.alerts-row-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.alerts-row-title {
+  font-size: 0.82rem;
+  color: #c8c3b5;
+}
+
+.alerts-row-time {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.72rem;
+  color: var(--corona);
+  white-space: nowrap;
+}
+
+.alerts-master-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.82rem;
+  color: #c8c3b5;
+  cursor: pointer;
+}
+
+.alerts-events {
+  border-top: 1px solid var(--line);
+  padding-top: 0.7rem;
+}
+
+.alerts-mini-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.9rem;
+  padding-top: 0.45rem;
+}
+
+#photo-subsection.is-disabled .alerts-events {
+  display: none;
+}
+
 .duration-note {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Consolas", "Courier New", monospace;
   font-size: 0.78rem;
   color: #8b8779;
   margin-top: 1rem;
@@ -676,6 +764,13 @@ footer a {
     width: 40px;
     max-height: 40px;
   }
+
+  .alerts-row-main,
+  .alerts-mini-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
 }
 
 #btn-exit-kiosk {
@@ -727,3 +822,4 @@ body.kiosk #btn-exit-kiosk {
     animation: none !important;
   }
 }
+
