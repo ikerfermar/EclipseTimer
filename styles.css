@@ -22,6 +22,10 @@ body {
   height: 100%;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   background-color: #000000;
   color: var(--paper);
