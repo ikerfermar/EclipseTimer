@@ -23,7 +23,10 @@ body {
 }
 
 body {
-  background: radial-gradient(circle at 15% -20%, #29231a 0%, #090909 35%, #000000 75%);
+  background-color: #000000;
+  background-image: radial-gradient(circle at 15% -20%, rgba(41, 35, 26, 0.95) 0%, rgba(9, 9, 9, 0.72) 28%, rgba(0, 0, 0, 0) 56%);
+  background-repeat: no-repeat;
+  background-size: 100% 42vh;
   color: var(--paper);
   font-family: "IBM Plex Sans", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -262,20 +265,40 @@ body.kiosk #loc-section,
 body.kiosk #announce-section,
 body.kiosk #alerts-section,
 body.kiosk #test-section,
-body.kiosk #persist-section,
 body.kiosk footer {
   display: none !important;
 }
 
 body.kiosk .wrap {
+  display: flex;
+  flex-direction: column;
   max-width: 100%;
   min-height: 100dvh;
-  padding: 0 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+  padding: 0 0.75rem calc(0.5rem + env(safe-area-inset-bottom));
+}
+
+body.kiosk #disk-section,
+body.kiosk #countdown-section,
+body.kiosk #contacts-section {
+  display: block !important;
+}
+
+body.kiosk #disk-section {
+  flex: 0 0 auto;
+  padding-top: calc(0.75rem + env(safe-area-inset-top));
+  padding-bottom: 0.35rem;
+}
+
+body.kiosk #countdown-section {
+  flex: 0 0 auto;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 
 body.kiosk .countdown .clock {
   font-size: clamp(1.8rem, 10vw, 3.1rem);
   line-height: 1.04;
+  margin: 0.2rem 0;
 }
 
 body.kiosk #disk-svg {
@@ -285,17 +308,52 @@ body.kiosk #disk-svg {
 
 body.kiosk section {
   border-bottom: none;
-  padding-left: 0.75rem;
-  padding-right: 0.75rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
 }
 
 body.kiosk #contacts-section {
-  max-height: 45dvh;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
+  padding-top: 0.35rem;
+  padding-bottom: 0.25rem;
 }
 
 body.kiosk .countdown .event-name {
   font-size: clamp(0.88rem, 3.8vw, 1.15rem);
+}
+
+body.kiosk .label {
+  margin-bottom: 0.45rem;
+}
+
+body.kiosk .disk-wrap {
+  gap: 0.55rem;
+  padding: 0.1rem 0;
+}
+
+body.kiosk .mag-readout .num {
+  font-size: clamp(1.45rem, 7.2vw, 2rem);
+}
+
+body.kiosk .phase-name {
+  min-height: 1.1em;
+}
+
+body.kiosk .contact {
+  padding: 0.45rem 0;
+}
+
+body.kiosk .contact .time {
+  font-size: 1rem;
+}
+
+body.kiosk .contact-geo,
+body.kiosk .duration-note,
+body.kiosk .sun-geo {
+  font-size: 0.64rem;
 }
 
 .countdown {
