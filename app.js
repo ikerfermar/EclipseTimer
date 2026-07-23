@@ -17,16 +17,39 @@ const TAN_F2 = 0.0045911;
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
 const UI_TICK_MS = 100;
+const PREFS_KEY = "eclipsetimer-alert-prefs-v1";
 
 const $ = (id) => document.getElementById(id);
+
+const OBSERVATION_DEFAULTS = {
+  umbra: true,
+  bandsIn: true,
+  horizon: true,
+  tempAnimals: true,
+  bandsOut: true,
+  glassesOff: true,
+  glassesOn: true
+};
+
+const OBSERVATION_CONTROL_IDS = {
+  umbra: "obs-umbra",
+  bandsIn: "obs-bands-in",
+  horizon: "obs-horizon",
+  tempAnimals: "obs-temp-animals",
+  bandsOut: "obs-bands-out",
+  glassesOff: "obs-glasses-off",
+  glassesOn: "obs-glasses-on"
+};
 
 let state = {
   lat: null,
   lon: null,
   alt: 0,
   contacts: null,
-  alertsFired: { prep: false, remove: false, filterOn: false },
+  alertsFired: {},
   voiceFired: { c1: false, c2: false, c3: false, c4: false },
+  observationEnabled: { ...OBSERVATION_DEFAULTS },
+  photoEnabled: true,
   testMode: false,
   testStartReal: null,
   testStartVirtualT: null,
@@ -42,13 +65,86 @@ let lastUiTick = 0;
 let sharedAudioCtx = null;
 let diskNodes = null;
 let hiddenAtMs = null;
-let speechTimer = null;
 let speechLastAtMs = 0;
+let speechQueue = [];
+let speechQueueBusy = false;
 
 const SPEECH_MIN_GAP_MS = 900;
 const SPEECH_TEST_GAP_MS = 1400;
+const ALERT_MAX_LATE_SEC = 3;
 const RESULT_SECTION_IDS = ["main-section", "alerts-section", "ops-section"];
 const COLLAPSIBLE_POST_LOCATION_IDS = ["alerts-section", "ops-section"];
+
+function clearSpeechQueue() {
+  speechQueue = [];
+  speechQueueBusy = false;
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+function loadAlertPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const obs = parsed.observationEnabled || {};
+    Object.keys(OBSERVATION_DEFAULTS).forEach((key) => {
+      if (typeof obs[key] === "boolean") state.observationEnabled[key] = obs[key];
+    });
+    if (typeof parsed.photoEnabled === "boolean") {
+      state.photoEnabled = parsed.photoEnabled;
+    }
+  } catch (_) {
+    // ignore malformed local storage
+  }
+}
+
+function saveAlertPrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      observationEnabled: state.observationEnabled,
+      photoEnabled: state.photoEnabled
+    }));
+  } catch (_) {
+    // ignore storage failures
+  }
+}
+
+function syncAlertControlsFromState() {
+  Object.entries(OBSERVATION_CONTROL_IDS).forEach(([key, id]) => {
+    const input = $(id);
+    if (input) input.checked = !!state.observationEnabled[key];
+  });
+
+  const master = $("chk-photo-master");
+  if (master) master.checked = state.photoEnabled;
+  const photoSubsection = $("photo-subsection");
+  if (photoSubsection) photoSubsection.classList.toggle("is-disabled", !state.photoEnabled);
+}
+
+function bindAlertControls() {
+  Object.entries(OBSERVATION_CONTROL_IDS).forEach(([key, id]) => {
+    const input = $(id);
+    if (!input) return;
+    input.addEventListener("change", () => {
+      state.observationEnabled[key] = !!input.checked;
+      saveAlertPrefs();
+    });
+  });
+
+  const master = $("chk-photo-master");
+  if (!master) return;
+  master.addEventListener("change", () => {
+    state.photoEnabled = !!master.checked;
+    if (!state.photoEnabled) {
+      hideBanner();
+      clearSpeechQueue();
+    }
+    syncAlertControlsFromState();
+    saveAlertPrefs();
+  });
+}
 
 function poly(c, t) {
   return c[0] + c[1] * t + c[2] * t * t + c[3] * t * t * t;
@@ -183,8 +279,9 @@ function fmtMadrid(date) {
 }
 
 function resetAlerts() {
-  state.alertsFired = { prep: false, remove: false, filterOn: false };
+  state.alertsFired = {};
   state.voiceFired = { c1: false, c2: false, c3: false, c4: false };
+  clearSpeechQueue();
 }
 
 function setLocStatus(msg, cls) {
@@ -480,36 +577,57 @@ function beep(freq, times = 1) {
   }
 }
 
-function speakNow(text, interrupt) {
-  if (interrupt) window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "es-ES";
-  u.rate = 1.0;
-  window.speechSynthesis.speak(u);
-  speechLastAtMs = performance.now();
-}
+function pumpSpeechQueue() {
+  if (speechQueueBusy || !speechQueue.length || !("speechSynthesis" in window)) return;
 
-function speak(text, interrupt = true) {
-  if (!("speechSynthesis" in window)) return;
-
-  const now = performance.now();
-  const minGap = state.testMode ? SPEECH_TEST_GAP_MS : SPEECH_MIN_GAP_MS;
-  const delta = now - speechLastAtMs;
-
-  if (speechTimer) {
-    clearTimeout(speechTimer);
-    speechTimer = null;
-  }
-
-  if (delta >= minGap) {
-    speakNow(text, interrupt);
+  const synth = window.speechSynthesis;
+  if (synth.speaking || synth.pending) {
+    setTimeout(pumpSpeechQueue, 120);
     return;
   }
 
-  speechTimer = setTimeout(() => {
-    speakNow(text, interrupt);
-    speechTimer = null;
-  }, minGap - delta);
+  const now = performance.now();
+  const minGap = state.testMode ? SPEECH_TEST_GAP_MS : SPEECH_MIN_GAP_MS;
+  const wait = Math.max(0, speechLastAtMs + minGap - now);
+  if (wait > 0) {
+    setTimeout(pumpSpeechQueue, wait);
+    return;
+  }
+
+  const next = speechQueue.shift();
+  if (!next) return;
+  if (next.interrupt) synth.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(next.text);
+  utterance.lang = "es-ES";
+  utterance.rate = 1.0;
+  speechQueueBusy = true;
+
+  const unlock = () => {
+    speechQueueBusy = false;
+    speechLastAtMs = performance.now();
+    setTimeout(pumpSpeechQueue, 20);
+  };
+
+  utterance.onend = unlock;
+  utterance.onerror = unlock;
+  synth.speak(utterance);
+}
+
+function speak(text, options = {}) {
+  if (!("speechSynthesis" in window)) return;
+
+  const entry = {
+    text,
+    interrupt: !!options.interrupt
+  };
+
+  if (options.priority === "high") {
+    speechQueue.unshift(entry);
+  } else {
+    speechQueue.push(entry);
+  }
+  pumpSpeechQueue();
 }
 
 function notify(title, body) {
@@ -541,7 +659,7 @@ function fireAlert(tag, text, color, voiceText, beepFreq, beepTimes, vibratePatt
   beep(beepFreq, beepTimes);
   if (navigator.vibrate) navigator.vibrate(vibratePattern);
   notify(`Eclipse · ${tag}`, text);
-  speak(voiceText, true);
+  speak(voiceText, { interrupt: false, priority: "normal" });
 
   if (bannerTimeout) clearTimeout(bannerTimeout);
   bannerTimeout = setTimeout(() => {
@@ -549,24 +667,200 @@ function fireAlert(tag, text, color, voiceText, beepFreq, beepTimes, vibratePatt
   }, 8000);
 }
 
-function checkAlerts(t, c) {
-  if (c.c2 !== null) {
-    if (!state.alertsFired.prep && t >= c.c2 - 30 / 3600) {
-      fireAlert("C2 · faltan 30s", "Mano al filtro", "#e0ac5c", "Mano al filtro. Prepárate para quitarlo.", 880, 1, [120]);
-      state.alertsFired.prep = true;
+function addTimedEvent(list, key, time, payload) {
+  if (time === null || Number.isNaN(time)) return;
+  list.push({ key, time, ...payload });
+}
+
+function buildTimedEvents(c) {
+  const events = [];
+
+  if (c.c2 !== null && c.c3 !== null) {
+    const midTotality = c.c2 + (c.c3 - c.c2) / 2;
+
+    if (state.observationEnabled.umbra) {
+      addTimedEvent(events, "obs-umbra", c.c2 - 60 / 3600, {
+        tag: "Observacion",
+        text: "Llega la umbra en un minuto",
+        color: "#e0ac5c",
+        voice: "Atencion. La umbra llega en un minuto.",
+        beepFreq: 760,
+        beepTimes: 1,
+        vibrate: [100]
+      });
     }
-    if (!state.alertsFired.remove && t >= c.c2 - 20 / 3600) {
-      fireAlert("C2 · faltan 20s", "Quita el filtro", "#5f7a5e", "Quita el filtro ahora.", 660, 2, [90, 80, 90]);
-      state.alertsFired.remove = true;
+
+    if (state.observationEnabled.bandsIn) {
+      addTimedEvent(events, "obs-bands-in", c.c2 - 25 / 3600, {
+        tag: "Observacion",
+        text: "Busca bandas de sombra en superficies claras",
+        color: "#e0ac5c",
+        voice: "Atencion. Bandas de sombra en breve.",
+        beepFreq: 720,
+        beepTimes: 1,
+        vibrate: [80]
+      });
+    }
+
+    if (state.observationEnabled.horizon) {
+      addTimedEvent(events, "obs-horizon", c.c2 + 5 / 3600, {
+        tag: "Observacion",
+        text: "Observa el resplandor de 360 grados en el horizonte",
+        color: "#5f7a5e",
+        voice: "Observa ahora el brillo de trescientos sesenta grados en el horizonte.",
+        beepFreq: 640,
+        beepTimes: 1,
+        vibrate: [70]
+      });
+    }
+
+    if (state.observationEnabled.tempAnimals) {
+      addTimedEvent(events, "obs-temp-animals", midTotality, {
+        tag: "Observacion",
+        text: "Fijate en temperatura, viento y comportamiento animal",
+        color: "#5f7a5e",
+        voice: "Mitad de la totalidad. Fijate en temperatura, viento y comportamiento animal.",
+        beepFreq: 620,
+        beepTimes: 1,
+        vibrate: [70]
+      });
+    }
+
+    if (state.observationEnabled.bandsOut) {
+      addTimedEvent(events, "obs-bands-out", c.c3 + 10 / 3600, {
+        tag: "Observacion",
+        text: "Bandas de sombra de salida",
+        color: "#e0ac5c",
+        voice: "Atencion. Posibles bandas de sombra de salida.",
+        beepFreq: 710,
+        beepTimes: 1,
+        vibrate: [80]
+      });
+    }
+
+    if (state.observationEnabled.glassesOff && !state.photoEnabled) {
+      addTimedEvent(events, "obs-glasses-off", c.c2, {
+        tag: "Seguridad visual",
+        text: "Puedes quitar gafas y filtro",
+        color: "#5f7a5e",
+        voice: "Comienza la totalidad. Puedes quitar gafas y filtro solar.",
+        beepFreq: 660,
+        beepTimes: 2,
+        vibrate: [90, 80, 90]
+      });
+    }
+
+    if (state.observationEnabled.glassesOn && !state.photoEnabled) {
+      addTimedEvent(events, "obs-glasses-on", c.c3 + 15 / 3600, {
+        tag: "Seguridad visual",
+        text: "Vuelve a poner gafas y filtro",
+        color: "#9c4632",
+        voice: "Vuelve a poner gafas y filtro ahora.",
+        beepFreq: 460,
+        beepTimes: 2,
+        vibrate: [90, 80, 90]
+      });
+    }
+
+    if (state.photoEnabled) {
+      addTimedEvent(events, "photo-hand", c.c2 - 40 / 3600, {
+        tag: "Fotografia",
+        text: "Mano al filtro",
+        color: "#e0ac5c",
+        voice: "Fotografia. Mano al filtro.",
+        beepFreq: 860,
+        beepTimes: 1,
+        vibrate: [100]
+      });
+
+      for (let sec = 5; sec >= 1; sec -= 1) {
+        addTimedEvent(events, `photo-c2-count-${sec}`, c.c2 - sec / 3600, {
+          tag: "C2",
+          text: `Cuenta atras ${sec}`,
+          color: "#e0ac5c",
+          voice: String(sec),
+          beepFreq: 760,
+          beepTimes: 1,
+          vibrate: [50],
+          quiet: true,
+          speechPriority: "high"
+        });
+      }
+
+      addTimedEvent(events, "photo-remove-filter", c.c2, {
+        tag: "Fotografia",
+        text: "Quita el filtro ahora",
+        color: "#5f7a5e",
+        voice: "Quita el filtro ahora.",
+        beepFreq: 680,
+        beepTimes: 2,
+        vibrate: [90, 80, 90]
+      });
+
+      for (let sec = 5; sec >= 1; sec -= 1) {
+        const offsetSec = 15 - sec;
+        addTimedEvent(events, `photo-c3plus-count-${sec}`, c.c3 + offsetSec / 3600, {
+          tag: "C3",
+          text: `Cuenta atras ${sec}`,
+          color: "#9c4632",
+          voice: String(sec),
+          beepFreq: 620,
+          beepTimes: 1,
+          vibrate: [50],
+          quiet: true,
+          speechPriority: "high"
+        });
+      }
+
+      addTimedEvent(events, "photo-filter-on", c.c3 + 15 / 3600, {
+        tag: "Fotografia",
+        text: "Pon el filtro y las gafas ahora",
+        color: "#9c4632",
+        voice: "Pon el filtro y las gafas ahora.",
+        beepFreq: 440,
+        beepTimes: 3,
+        vibrate: [90, 80, 90, 80, 90]
+      });
     }
   }
 
-  if (c.c3 !== null) {
-    if (!state.alertsFired.filterOn && t >= c.c3 - 10 / 3600) {
-      fireAlert("C3 · faltan 10s", "Pon el filtro", "#9c4632", "Pon el filtro ya. Termina la totalidad.", 440, 3, [90, 80, 90, 80, 90]);
-      state.alertsFired.filterOn = true;
+  return events.sort((a, b) => a.time - b.time);
+}
+
+function triggerTimedEvent(event) {
+  const banner = $("alert-banner");
+  const bannerMs = event.quiet ? 1600 : 8000;
+
+  $("alert-banner-tag").textContent = event.tag;
+  $("alert-banner-tag").style.color = event.color;
+  $("alert-banner-text").textContent = event.text;
+  banner.style.borderTopColor = event.color;
+  banner.style.display = "flex";
+  banner.classList.add("show");
+  banner.setAttribute("aria-hidden", "false");
+
+  if (event.beepFreq && event.beepTimes) beep(event.beepFreq, event.beepTimes);
+  if (event.vibrate && navigator.vibrate) navigator.vibrate(event.vibrate);
+  notify(`Eclipse · ${event.tag}`, event.text);
+  speak(event.voice, { interrupt: false, priority: event.speechPriority || "normal" });
+
+  if (bannerTimeout) clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(() => {
+    hideBanner();
+  }, bannerMs);
+}
+
+function checkAlerts(t, c) {
+  const events = buildTimedEvents(c);
+  events.forEach((event) => {
+    if (!state.alertsFired[event.key] && t >= event.time) {
+      state.alertsFired[event.key] = true;
+      const lateSec = (t - event.time) * 3600;
+      if (lateSec <= ALERT_MAX_LATE_SEC) {
+        triggerTimedEvent(event);
+      }
     }
-  }
+  });
 }
 
 function checkVoiceAnnouncements(t, c) {
@@ -583,7 +877,7 @@ function checkVoiceAnnouncements(t, c) {
     const et = c[ev.key];
     if (et !== null && !state.voiceFired[ev.key] && t >= et) {
       state.voiceFired[ev.key] = true;
-      speak(ev.text, true);
+      speak(ev.text, { interrupt: false, priority: "normal" });
       notify(`Eclipse · ${ev.label}`, ev.text);
     }
   });
@@ -848,7 +1142,7 @@ function bindEvents() {
       alert("Este navegador no soporta síntesis de voz.");
       return;
     }
-    speak("Prueba de voz. Si oyes esto, todo funciona correctamente.", true);
+    speak("Prueba de voz. Si oyes esto, todo funciona correctamente.", { interrupt: false, priority: "normal" });
   });
 
   $("btn-test-start").addEventListener("click", () => {
@@ -882,7 +1176,16 @@ function bindEvents() {
 }
 
 window.addEventListener("load", () => {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {
+      // Ignore service worker registration failures.
+    });
+  }
+
+  loadAlertPrefs();
   bindEvents();
+  bindAlertControls();
+  syncAlertControlsFromState();
   updateLocateButton();
   hideBanner();
 });

@@ -4,14 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
+<meta name="description" content="Cronometro de eclipse total con tiempos locales, avisos y modo sin conexion.">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="icon" type="image/png" href="assets/images/logo.png">
-<link rel="apple-touch-icon" href="assets/images/logo.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=Source+Serif+4:wght@400;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/images/logo-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/images/logo-180.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="styles.css">
 <title>Eclipse - 12 agosto 2026</title>
 </head>
@@ -20,7 +19,7 @@
   <header>
     <div class="eyebrow">Cronometro de eclipse</div>
     <div class="title-row">
-      <img src="assets/images/logo.png" alt="Logo EclipseTimer" class="brand-logo">
+      <img src="assets/images/logo-96.png" width="96" height="96" fetchpriority="high" decoding="async" alt="Logo EclipseTimer" class="brand-logo">
       <h1>Eclipse total<br>12 agosto 2026</h1>
     </div>
   </header>
@@ -105,9 +104,83 @@
       <span class="section-toggle-icon" aria-hidden="true"></span>
     </button>
     <div class="section-body" id="alerts-section-body" hidden>
-    <div class="contact" style="border-top:none;"><div class="tag" style="color:#e0ac5c;">-30s</div><div class="desc">Mano al filtro</div><div></div></div>
-    <div class="contact"><div class="tag" style="color:#5f7a5e;">-20s</div><div class="desc">Quita el filtro</div><div></div></div>
-    <div class="contact"><div class="tag" style="color:#9c4632;">-10s</div><div class="desc">Pon el filtro</div><div></div></div>
+      <div class="alerts-subsection">
+        <div class="section-title">Observacion</div>
+        <div class="alerts-note">Activa o desactiva avisos de voz por fenomeno.</div>
+
+        <label class="alerts-row" for="obs-umbra">
+          <input type="checkbox" id="obs-umbra" checked>
+          <span class="alerts-row-main">
+            <span class="alerts-row-title">Llegada de la umbra</span>
+            <span class="alerts-row-time">C2 - 60s</span>
+          </span>
+        </label>
+
+        <label class="alerts-row" for="obs-bands-in">
+          <input type="checkbox" id="obs-bands-in" checked>
+          <span class="alerts-row-main">
+            <span class="alerts-row-title">Bandas de sombra (entrada)</span>
+            <span class="alerts-row-time">C2 - 25s</span>
+          </span>
+        </label>
+
+        <label class="alerts-row" for="obs-horizon">
+          <input type="checkbox" id="obs-horizon" checked>
+          <span class="alerts-row-main">
+            <span class="alerts-row-title">Brillo 360° del horizonte</span>
+            <span class="alerts-row-time">C2 + 5s</span>
+          </span>
+        </label>
+
+        <label class="alerts-row" for="obs-temp-animals">
+          <input type="checkbox" id="obs-temp-animals" checked>
+          <span class="alerts-row-main">
+            <span class="alerts-row-title">Temperatura y comportamiento animal</span>
+            <span class="alerts-row-time">Mitad de la totalidad</span>
+          </span>
+        </label>
+
+        <label class="alerts-row" for="obs-bands-out">
+          <input type="checkbox" id="obs-bands-out" checked>
+          <span class="alerts-row-main">
+            <span class="alerts-row-title">Bandas de sombra (salida)</span>
+            <span class="alerts-row-time">C3 + 10s</span>
+          </span>
+        </label>
+
+        <label class="alerts-row" for="obs-glasses-off">
+          <input type="checkbox" id="obs-glasses-off" checked>
+          <span class="alerts-row-main">
+            <span class="alerts-row-title">Se pueden quitar gafas/filtro</span>
+            <span class="alerts-row-time">C2</span>
+          </span>
+        </label>
+
+        <label class="alerts-row" for="obs-glasses-on">
+          <input type="checkbox" id="obs-glasses-on" checked>
+          <span class="alerts-row-main">
+            <span class="alerts-row-title">Volver a poner gafas/filtro</span>
+            <span class="alerts-row-time">C3 + 15s</span>
+          </span>
+        </label>
+
+        <div class="alerts-glasses-note">Recomendacion de seguridad visual sincronizada con C2 y C3.</div>
+      </div>
+
+      <div class="alerts-subsection" id="photo-subsection">
+        <label class="alerts-master-toggle" for="chk-photo-master">
+          <input type="checkbox" id="chk-photo-master" checked>
+          <span>Fotografia activa</span>
+        </label>
+
+        <div id="photo-events" class="alerts-events">
+          <div class="section-title">Fotografia</div>
+          <div class="alerts-mini-row"><span class="alerts-row-time">C2 - 40s</span><span class="alerts-row-title">Mano al filtro</span></div>
+          <div class="alerts-mini-row"><span class="alerts-row-time">C2 - 5..1</span><span class="alerts-row-title">Cuenta atras para quitar filtro</span></div>
+          <div class="alerts-mini-row"><span class="alerts-row-time">C3 + 10..14</span><span class="alerts-row-title">Cuenta atras para volver a poner filtro/gafas</span></div>
+          <div class="alerts-mini-row"><span class="alerts-row-time">C3 + 15s</span><span class="alerts-row-title">Pon el filtro/gafas ahora</span></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -138,8 +211,8 @@
   </section>
 
   <div id="alert-banner" style="display:none; position:fixed; inset:0; z-index:999; align-items:center; justify-content:center; text-align:center; padding:2rem; flex-direction:column; gap:.75rem; background:rgba(0,0,0,.95); color:#e9e6dd; border-top:6px solid #e0ac5c;" aria-live="assertive" aria-hidden="true">
-    <div id="alert-banner-tag" style="font-family:'IBM Plex Mono', monospace; font-size:.85rem; letter-spacing:.14em; text-transform:uppercase;"></div>
-    <div id="alert-banner-text" style="font-family:'Source Serif 4', serif; font-size:2.1rem; line-height:1.15;"></div>
+    <div id="alert-banner-tag" style="font-family:'Consolas', 'Courier New', monospace; font-size:.85rem; letter-spacing:.14em; text-transform:uppercase;"></div>
+    <div id="alert-banner-text" style="font-family:'Georgia', 'Times New Roman', serif; font-size:2.1rem; line-height:1.15;"></div>
     <button id="alert-banner-dismiss" class="small" style="margin-top:1rem; border-color:currentColor; color:inherit;">Cerrar</button>
   </div>
 
@@ -147,7 +220,6 @@
 
   <footer>
     © 2026 Iker Fernández (@ikerfer_photo). Todos los derechos reservados.<br>
-    Elementos Besselianos: Espenak / NASA GSFC. No incluye horizonte local. <a href="https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2026Aug12Tbeselm.html" target="_blank" rel="noopener">Verificar fuente</a>.
   </footer>
 </div>
 
