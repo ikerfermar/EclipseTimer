@@ -24,9 +24,6 @@ body {
 
 body {
   background-color: #000000;
-  background-image: radial-gradient(circle at 15% -20%, rgba(41, 35, 26, 0.95) 0%, rgba(9, 9, 9, 0.72) 28%, rgba(0, 0, 0, 0) 56%);
-  background-repeat: no-repeat;
-  background-size: 100% 42vh;
   color: var(--paper);
   font-family: "IBM Plex Sans", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -330,8 +327,12 @@ body.kiosk .label {
 }
 
 body.kiosk .disk-wrap {
-  gap: 0.55rem;
+  display: grid;
+  grid-template-columns: min(34vw, 160px) 1fr;
+  align-items: center;
+  gap: 0.7rem;
   padding: 0.1rem 0;
+  text-align: left;
 }
 
 body.kiosk .mag-readout .num {
@@ -340,20 +341,37 @@ body.kiosk .mag-readout .num {
 
 body.kiosk .phase-name {
   min-height: 1.1em;
+  text-align: left;
+}
+
+body.kiosk .mag-readout,
+body.kiosk .sun-geo {
+  text-align: left;
+}
+
+body.kiosk #disk-svg {
+  grid-row: 1 / 4;
+  width: min(34vw, 160px);
+  height: min(34vw, 160px);
 }
 
 body.kiosk .contact {
-  padding: 0.45rem 0;
+  gap: 0.55rem;
+  padding: 0.4rem 0;
 }
 
 body.kiosk .contact .time {
-  font-size: 1rem;
+  font-size: 0.92rem;
 }
 
 body.kiosk .contact-geo,
 body.kiosk .duration-note,
 body.kiosk .sun-geo {
   font-size: 0.64rem;
+}
+
+body.kiosk .contact .desc {
+  font-size: 0.76rem;
 }
 
 .countdown {
