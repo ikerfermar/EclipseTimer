@@ -75,6 +75,18 @@ const LOCATION_SOURCE_PRESET = "preset";
 
 const $ = (id) => document.getElementById(id);
 
+// Los campos de coordenadas ya no son type="number": en un movil con
+// idioma espanol, ese input nativo espera coma decimal (formato del
+// sistema), pero el placeholder mostraba un ejemplo con punto -
+// inconsistente, y encima algunos navegadores llegan a rechazar el
+// caracter "equivocado" al pegar. Con type="text" + este parser propio
+// aceptamos coma o punto indistintamente (por ejemplo, al pegar unas
+// coordenadas copiadas de Google Maps, que usa punto).
+function parseDecimal(str) {
+  if (typeof str !== "string") return NaN;
+  return parseFloat(str.trim().replace(",", "."));
+}
+
 const DEFAULT_ALERT_COPY = {
   events: {
     "c1-minus-60": {
@@ -145,7 +157,7 @@ let state = {
   alt: 0,
   contacts: null,
   alertsFired: {},
-  photoEnabled: true,
+  photoEnabled: false,
   manualOffsetSec: 0,
   testMode: false,
   testStartWallMs: null,
@@ -198,8 +210,8 @@ const DEFAULT_PAYPAL_CONFIG = {
 let paypalConfig = DEFAULT_PAYPAL_CONFIG;
 
 const ALERT_MAX_LATE_SEC = 0.9;
-const RESULT_SECTION_IDS = ["main-section", "alerts-section", "ops-section"];
-const COLLAPSIBLE_POST_LOCATION_IDS = ["alerts-section", "ops-section"];
+const RESULT_SECTION_IDS = ["main-section", "ops-section", "alerts-section"];
+const COLLAPSIBLE_POST_LOCATION_IDS = ["ops-section", "alerts-section"];
 
 function clearSpeechQueue() {
   if ("speechSynthesis" in window) {
@@ -643,24 +655,26 @@ function markManualLocationInput() {
 }
 
 function readLat() {
-  const mag = Math.abs(parseFloat($("in-lat").value));
+  const mag = Math.abs(parseDecimal($("in-lat").value));
   if (Number.isNaN(mag)) return NaN;
   return $("lat-hemi").dataset.value === "S" ? -mag : mag;
 }
 
 function readLon() {
-  const mag = Math.abs(parseFloat($("in-lon").value));
+  const mag = Math.abs(parseDecimal($("in-lon").value));
   if (Number.isNaN(mag)) return NaN;
   return $("lon-hemi").dataset.value === "O" ? -mag : mag;
 }
 
 function writeLat(val) {
-  $("in-lat").value = Math.abs(val).toFixed(4);
+  // Coma para que coincida con lo que se le pide al usuario que escriba
+  // (ver parseDecimal): mismo formato al leer y al mostrar.
+  $("in-lat").value = Math.abs(val).toFixed(4).replace(".", ",");
   setHemiButton($("lat-hemi"), val < 0 ? "S" : "N", "N");
 }
 
 function writeLon(val) {
-  $("in-lon").value = Math.abs(val).toFixed(4);
+  $("in-lon").value = Math.abs(val).toFixed(4).replace(".", ",");
   setHemiButton($("lon-hemi"), val < 0 ? "O" : "E", "O");
 }
 
@@ -864,7 +878,7 @@ function recalc(options = {}) {
 
   const lat = readLat();
   const lon = readLon();
-  const alt = parseFloat($("in-alt").value) || 0;
+  const alt = parseDecimal($("in-alt").value) || 0;
 
   if (Number.isNaN(lat) || Number.isNaN(lon)) {
     setLocStatus("Introduce latitud y longitud válidas.", "err");
@@ -881,7 +895,7 @@ function recalc(options = {}) {
   // aplica solo a C2/C3, que son los contactos sensibles a la forma real
   // del borde lunar; C1/C4 se dejan tal cual los da el cálculo besseliano.
   const offsetInput = $("in-manual-offset");
-  const offsetSec = offsetInput ? (parseFloat(offsetInput.value) || 0) : 0;
+  const offsetSec = offsetInput ? (parseDecimal(offsetInput.value) || 0) : 0;
   state.manualOffsetSec = offsetSec;
   if (offsetSec !== 0) {
     const offsetHours = offsetSec / 3600;
@@ -937,7 +951,7 @@ function renderContacts() {
   list.replaceChildren();
 
   const rows = [
-    { tag: "C1", desc: "Inicio parcial", t: c.c1 },
+    { tag: "C1", desc: "Inicio eclipse", t: c.c1 },
     { tag: "C2", desc: "Inicio totalidad", t: c.c2 },
     { tag: "C3", desc: "Fin totalidad", t: c.c3 },
     { tag: "C4", desc: "Fin eclipse", t: c.c4 }
@@ -1397,7 +1411,7 @@ function addTimedEvent(list, key, time, payload) {
 // a ponerlo después de C3.
 const CONTACT_WARNING_LEAD_SEC = 60;
 const PHOTO_FILTER_OFF_LEAD_SEC = 20;
-const PHOTO_FILTER_ON_LAG_SEC = 15;
+const PHOTO_FILTER_ON_LAG_SEC = 20;
 
 // Única fuente de verdad para los instantes de "quita el filtro"/"pon el
 // filtro". Antes buildTimedEvents() y checkSynchronizedCountdowns()
@@ -1721,7 +1735,7 @@ function drawDisk(fraction, insideTotality) {
 function updateCountdown(t, c) {
   const nodes = getTickNodes();
   const events = (c.countdownEvents || (c.countdownEvents = [
-    { name: "C1 · Inicio parcial", t: c.c1 },
+    { name: "C1 · Inicio eclipse", t: c.c1 },
     { name: "C2 · Inicio totalidad", t: c.c2 },
     { name: "C3 · Fin totalidad", t: c.c3 },
     { name: "C4 · Fin eclipse", t: c.c4 }
@@ -1863,7 +1877,7 @@ function tick() {
       phaseText = "Antes del eclipse";
       fraction = 0;
     } else if (c.total && t >= c.c2 && t <= c.c3) {
-      phaseText = "TOTALIDAD";
+      phaseText = "Totalidad";
       fraction = 1;
       insideTotality = true;
     } else if (t > c.c4) {
@@ -1878,6 +1892,7 @@ function tick() {
 
   const nodes = getTickNodes();
   setText(nodes.phaseName, phaseText);
+  if (nodes.phaseName) nodes.phaseName.classList.toggle("is-totality", insideTotality);
   drawDisk(fraction, insideTotality);
 
   let magPct = 0;
