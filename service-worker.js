@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_VERSION = "eclipsetimer-v47";
+const CACHE_VERSION = "eclipsetimer-v60";
 const UPDATE_TIMEOUT_MS = 1500;
 
 // iOS splash screens are requested only by Safari/iPadOS. They are cached on
@@ -9,6 +9,7 @@ const APP_SHELL = [
   "./",
   "index.html",
   "alerts.json",
+  "paypal.json",
   "styles.css",
   "app.js",
   "manifest.webmanifest",
@@ -17,6 +18,8 @@ const APP_SHELL = [
   "assets/images/logo-96.png",
   "assets/images/logo-180.png",
   "assets/images/logo-192.png",
+  "assets/images/logo-512.png",
+  "assets/images/logo-512-maskable.png",
   "assets/fonts/inter-400.woff2",
   "assets/fonts/inter-500.woff2",
   "assets/fonts/inter-600.woff2"
@@ -26,6 +29,7 @@ const CORE_UPDATE_URLS = new Set([
   new URL("./", self.location).href,
   new URL("index.html", self.location).href,
   new URL("alerts.json", self.location).href,
+  new URL("paypal.json", self.location).href,
   new URL("styles.css", self.location).href,
   new URL("app.js", self.location).href,
   new URL("manifest.webmanifest", self.location).href
@@ -90,12 +94,12 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      const url = new URL(event.request.url);
-      const isSameOrigin = url.origin === self.location.origin;
-      const shouldPreferFresh = event.request.mode === "navigate" || (isSameOrigin && CORE_UPDATE_URLS.has(url.href));
+      const shouldPreferFresh = event.request.mode === "navigate" || CORE_UPDATE_URLS.has(url.href);
       let networkFetch = null;
       const getNetworkFetch = () => {
         if (!networkFetch) networkFetch = fetchAndCache(event.request).catch(() => null);

@@ -129,7 +129,6 @@ const DEFAULT_ALERT_COPY = {
     }
   },
   photoSummary: {
-    title: "Avisos de fotografía",
     rows: {
       "photo-hand": "Prepara el filtro",
       "photo-remove-countdown": "Cuenta atrás filtro fuera",
@@ -190,6 +189,14 @@ let alertDisplayActive = false;
 let countdownFlashTimer = null;
 let alertCopy = DEFAULT_ALERT_COPY;
 
+const DEFAULT_PAYPAL_CONFIG = {
+  enabled: true,
+  label: "Apoyar el proyecto",
+  url: ""
+};
+
+let paypalConfig = DEFAULT_PAYPAL_CONFIG;
+
 const ALERT_MAX_LATE_SEC = 0.9;
 const RESULT_SECTION_IDS = ["main-section", "alerts-section", "ops-section"];
 const COLLAPSIBLE_POST_LOCATION_IDS = ["alerts-section", "ops-section"];
@@ -229,9 +236,6 @@ function mergeAlertCopyConfig(config) {
   return {
     events,
     photoSummary: {
-      title: typeof config.photoSummary?.title === "string"
-        ? config.photoSummary.title
-        : DEFAULT_ALERT_COPY.photoSummary.title,
       rows: mergeStringMap(DEFAULT_ALERT_COPY.photoSummary.rows, config.photoSummary?.rows)
     }
   };
@@ -245,6 +249,27 @@ async function loadAlertCopyConfig() {
     alertCopy = mergeAlertCopyConfig(await response.json());
   } catch (_) {
     alertCopy = DEFAULT_ALERT_COPY;
+  }
+}
+
+function mergePaypalConfig(config) {
+  if (!config || typeof config !== "object") return DEFAULT_PAYPAL_CONFIG;
+  return {
+    ...DEFAULT_PAYPAL_CONFIG,
+    enabled: typeof config.enabled === "boolean" ? config.enabled : DEFAULT_PAYPAL_CONFIG.enabled,
+    label: typeof config.label === "string" ? config.label : DEFAULT_PAYPAL_CONFIG.label,
+    url: typeof config.url === "string" ? config.url.trim() : ""
+  };
+}
+
+async function loadPaypalConfig() {
+  if (typeof fetch !== "function") return;
+  try {
+    const response = await fetch("paypal.json", { cache: "no-cache" });
+    if (!response.ok) return;
+    paypalConfig = mergePaypalConfig(await response.json());
+  } catch (_) {
+    paypalConfig = DEFAULT_PAYPAL_CONFIG;
   }
 }
 
@@ -711,8 +736,9 @@ function cancelLocateRequest(statusMsg, statusClass) {
   }
 }
 
-function isLikelySafariIOS() {
-  return /iPhone|iPad|iPod/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
+function isLikelyIOS() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
 function requestCurrentPosition(options) {
@@ -740,10 +766,10 @@ function applyGeolocationPosition(pos, sourcePrefix) {
 }
 
 function handleLocateError(err) {
-  const safariHint = "Ubicación bloqueada. Actívala en Ajustes > Privacidad y seguridad > Localización > Safari, y recarga.";
+  const iosHint = "Ubicación bloqueada. Actívala en Ajustes > Privacidad y seguridad > Localización para este navegador, y recarga.";
 
-  if (isLikelySafariIOS()) {
-    setLocStatus(safariHint, "err");
+  if (isLikelyIOS()) {
+    setLocStatus(iosHint, "err");
   } else if (err && err.code === 1) {
     setLocStatus("Bloqueada por el navegador. Usa coordenadas manuales o 'León'.", "err");
   } else {
@@ -939,6 +965,7 @@ function renderContacts() {
     }
     const nodes = lines.map((line) => {
       const div = document.createElement("div");
+      div.className = "duration-line";
       div.textContent = line;
       return div;
     });
@@ -1383,10 +1410,6 @@ function renderAlertSummaries() {
   if (!photoEvents) return;
 
   photoEvents.replaceChildren();
-  const title = document.createElement("div");
-  title.className = "section-title";
-  title.textContent = alertCopy.photoSummary.title;
-  photoEvents.appendChild(title);
 
   const filterOffSec = PHOTO_FILTER_OFF_LEAD_SEC - SAFETY_MARGIN_SEC;
   const filterOnSec = PHOTO_FILTER_ON_LAG_SEC - SAFETY_MARGIN_SEC;
@@ -2067,11 +2090,9 @@ function bindEvents() {
   });
 }
 
-// Instalación guiada: Chrome/Android (y similares) disparan este evento en
-// vez de dejar que el navegador muestre su propio banner genérico. Lo
-// interceptamos para ofrecer un botón "Instalar app" bajo nuestro control.
-// iOS Safari no dispara este evento (no soporta beforeinstallprompt), así
-// que el botón simplemente no aparece ahí; conviven bien.
+// Instalación guiada: Chrome/Android (y similares) disparan este evento; iOS
+// usa el menú Compartir > Añadir a pantalla de inicio, también desde algunos
+// navegadores de terceros en versiones modernas.
 let deferredInstallPrompt = null;
 
 function isStandaloneDisplay() {
@@ -2097,7 +2118,7 @@ function bindInstallPrompt() {
   // Ya instalada (standalone): no hace falta ofrecer instalarla de nuevo.
   if (isStandaloneDisplay()) return;
 
-  const isIOS = isLikelySafariIOS();
+  const isIOS = isLikelyIOS();
   btn.hidden = false;
 
   window.addEventListener("beforeinstallprompt", (ev) => {
@@ -2106,9 +2127,7 @@ function bindInstallPrompt() {
     btn.hidden = false;
   });
 
-  // iOS Safari nunca dispara beforeinstallprompt (no lo soporta), así que
-  // ahí mostramos el botón igualmente: al tocarlo no hay prompt de sistema,
-  // solo instrucciones manuales (Compartir > Añadir a pantalla de inicio).
+  // iOS no ofrece beforeinstallprompt: mostramos instrucciones manuales.
   btn.addEventListener("click", async () => {
     if (deferredInstallPrompt) {
       btn.disabled = true;
@@ -2126,7 +2145,7 @@ function bindInstallPrompt() {
     }
 
     if (isIOS) {
-      showInstallHelp("Toca compartir (el icono de Safari) y luego «Añadir a pantalla de inicio».");
+      showInstallHelp("Toca Compartir y luego «Añadir a pantalla de inicio».");
       return;
     }
 
@@ -2185,11 +2204,36 @@ function bindNetworkStatus() {
   });
   window.addEventListener("online", () => {
     setOfflineStatus("Conexión recuperada.", "ok", 2600);
+    configureSupportButton();
   });
+}
+
+function isValidHttpsUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:";
+  } catch (_) {
+    return false;
+  }
+}
+
+function configureSupportButton() {
+  const section = $("support-section");
+  const btn = $("btn-support");
+  if (!section || !btn) return;
+
+  const enabled = !!paypalConfig.enabled && isValidHttpsUrl(paypalConfig.url);
+  section.hidden = !enabled;
+  btn.hidden = !enabled;
+  if (!enabled) return;
+
+  btn.href = paypalConfig.url;
+  btn.textContent = paypalConfig.label || DEFAULT_PAYPAL_CONFIG.label;
 }
 
 window.addEventListener("load", async () => {
   await loadAlertCopyConfig();
+  await loadPaypalConfig();
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./service-worker.js").then((reg) => {
@@ -2218,4 +2262,5 @@ window.addEventListener("load", async () => {
   updateAlertReadiness();
   hideBanner();
   restoreLastLocation();
+  configureSupportButton();
 });

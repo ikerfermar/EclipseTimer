@@ -375,6 +375,11 @@ section {
   display: block;
 }
 
+.accordion-section.is-collapsed {
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+}
+
 .accordion-section .section-body {
   padding-top: 0.95rem;
 }
@@ -962,7 +967,7 @@ body.kiosk.kiosk-ultra-height .duration-note {
 }
 
 .alert-readiness {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: fit-content;
@@ -1125,6 +1130,14 @@ body.kiosk .contact-geo.active {
   border-top: 1px solid var(--line);
 }
 
+.duration-line + .duration-line {
+  margin-top: 0.12rem;
+}
+
+body.kiosk .duration-line + .duration-line {
+  margin-top: 0.04rem;
+}
+
 .copy-times-button {
   display: inline-flex;
   align-items: center;
@@ -1159,6 +1172,39 @@ body.kiosk .fullscreen-row {
   display: none !important;
 }
 
+body.kiosk .alert-readiness,
+body.kiosk .copy-times-button {
+  display: none !important;
+}
+
+.support-section {
+  padding: 1.35rem 1.1rem 0;
+  text-align: center;
+}
+
+.support-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid rgba(224, 172, 92, 0.55);
+  border-radius: 3px;
+  background: rgba(224, 172, 92, 0.1);
+  color: var(--corona);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.support-button:hover {
+  background: rgba(224, 172, 92, 0.16);
+}
+
+body.kiosk .support-section {
+  display: none !important;
+}
+
 .test-actions-row {
   align-items: center;
 }
@@ -1185,10 +1231,6 @@ footer {
   line-height: 1.2;
   text-align: center;
   white-space: nowrap;
-}
-
-footer a {
-  color: #8b8779;
 }
 
 #alert-banner {

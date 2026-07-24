@@ -2,6 +2,7 @@
   "name": "EclipseTimer",
   "short_name": "EclipseTimer",
   "description": "Cronómetro de eclipse total con avisos, cálculos locales y modo sin conexión.",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

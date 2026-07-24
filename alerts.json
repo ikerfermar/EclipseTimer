@@ -52,7 +52,6 @@
     }
   },
   "photoSummary": {
-    "title": "Avisos de fotografía",
     "rows": {
       "photo-hand": "Prepara el filtro",
       "photo-remove-countdown": "Cuenta atrás filtro fuera",
