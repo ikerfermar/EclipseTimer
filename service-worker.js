@@ -1,6 +1,11 @@
 "use strict";
 
-const CACHE_VERSION = "eclipsetimer-v20";
+const CACHE_VERSION = "eclipsetimer-v26";
+// Los splash screens de iOS (assets/splash/*) se han sacado a propósito de
+// este precache: solo los pide Safari en iOS/iPadOS, así que precachearlos
+// aquí obligaba a Android a descargar ~1.6MB que nunca va a usar. El
+// manejador de "fetch" de abajo ya los cachea la primera vez que Safari los
+// pida (stale-while-revalidate), así que siguen funcionando offline igual.
 const APP_SHELL = [
   "./",
   "index.html",
@@ -16,21 +21,7 @@ const APP_SHELL = [
   "assets/images/logo-512-maskable.png",
   "assets/fonts/inter-400.woff2",
   "assets/fonts/inter-500.woff2",
-  "assets/fonts/inter-600.woff2",
-  "assets/splash/iphone-1290x2796.png",
-  "assets/splash/iphone-1179x2556.png",
-  "assets/splash/iphone-1284x2778.png",
-  "assets/splash/iphone-1170x2532.png",
-  "assets/splash/iphone-1125x2436.png",
-  "assets/splash/iphone-1242x2688.png",
-  "assets/splash/iphone-828x1792.png",
-  "assets/splash/iphone-750x1334.png",
-  "assets/splash/ipad-1620x2160.png",
-  "assets/splash/ipad-1668x2388.png",
-  "assets/splash/ipad-2048x2732.png",
-  "assets/splash/ipad-2160x1620.png",
-  "assets/splash/ipad-2388x1668.png",
-  "assets/splash/ipad-2732x2048.png"
+  "assets/fonts/inter-600.woff2"
 ];
 
 self.addEventListener("install", (event) => {

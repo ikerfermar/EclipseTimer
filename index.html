@@ -33,6 +33,7 @@
 <link rel="apple-touch-startup-image" href="assets/splash/ipad-2388x1668.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
 <link rel="apple-touch-startup-image" href="assets/splash/ipad-2732x2048.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
 <link rel="preload" href="assets/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 <title>Eclipse - 12 agosto 2026</title>
@@ -40,16 +41,65 @@
 <body>
 <div class="wrap">
   <header>
+    <button type="button" id="btn-about" class="about-toggle" aria-label="Cómo calcula la app este eclipse" aria-haspopup="dialog">
+      <span aria-hidden="true">ⓘ</span> Cómo funciona
+    </button>
     <div class="eyebrow">Cronómetro de eclipse</div>
     <div class="title-row">
       <img src="assets/images/logo-96.png" width="96" height="96" fetchpriority="high" decoding="async" alt="Logo EclipseTimer" class="brand-logo">
       <h1>Eclipse total<br>12 agosto 2026</h1>
     </div>
     <button type="button" id="btn-install" class="small" style="display:none; margin-top:.75rem;" aria-label="Instalar la aplicación en el dispositivo">Instalar app</button>
+    <div id="ios-install-help" class="audio-arm-banner" hidden>
+      <span>Toca compartir (el icono ⬆︎ de Safari) y luego «Añadir a pantalla de inicio».</span>
+      <button type="button" id="btn-ios-install-close" class="small">Entendido</button>
+    </div>
   </header>
 
+  <div id="about-panel" class="about-panel" hidden role="dialog" aria-modal="true" aria-labelledby="about-panel-title">
+    <div class="about-panel-inner">
+      <div class="about-panel-header">
+        <span class="section-title" id="about-panel-title">Cómo funciona</span>
+        <button type="button" id="btn-about-close" class="small" aria-label="Cerrar">Cerrar</button>
+      </div>
+
+      <div class="about-body">
+        <p>Esta app calcula los instantes exactos del eclipse (C1-C4) para tu ubicación mediante <strong>elementos besselianos</strong>, el método estándar en astronomía de posición para predecir eclipses solares — el mismo que usan la NASA, el IGN o cualquier efeméride profesional.</p>
+
+        <h3>Qué son los elementos besselianos</h3>
+        <p>En vez de calcular la posición del Sol y la Luna paso a paso, se proyecta la sombra de la Luna sobre un plano imaginario que pasa por el centro de la Tierra (el «plano fundamental»). Seis parámetros — x, y (posición del eje de la sombra), d (declinación), l1, l2 (radios de la penumbra y la umbra) y μ (ángulo horario) — descritos como polinomios de tercer grado en el tiempo bastan para reconstruir la geometría completa de la sombra en cualquier instante cercano al eclipse.</p>
+
+        <h3>Cómo se calculan tus horarios locales</h3>
+        <ol>
+          <li>Tus coordenadas (latitud, longitud, altitud) se convierten a coordenadas geocéntricas rectangulares, corrigiendo el achatamiento de la Tierra.</li>
+          <li>Para un instante <code>t</code> cualquiera, se evalúan los polinomios besselianos y se calcula la distancia entre tu posición y el eje de la sombra proyectada.</li>
+          <li>Se compara esa distancia con los radios de la penumbra (l1) y la umbra (l2) para saber si en ese instante el eclipse es parcial, total o no ha empezado.</li>
+          <li>Se recorre el eje temporal buscando los cambios de signo (dónde tu posición entra o sale de cada sombra) y se refina cada cruce por bisección hasta obtener el instante con precisión de milisegundos: así se obtienen C1, C2, C3 y C4.</li>
+        </ol>
+
+        <h3>ΔT: por qué la hora "astronómica" no es la del reloj</h3>
+        <p>Los elementos besselianos están referidos a Tiempo Dinámico Terrestre (TDT), una escala de tiempo uniforme que no depende de la rotación de la Tierra. La hora civil (UTC), en cambio, sí depende de esa rotación, que se frena de forma leve e irregular por la fricción de marea. La diferencia entre ambas escalas se llama <strong>ΔT</strong>; para este eclipse concreto, la NASA la fija en <strong>71.4 segundos</strong>. Cada resultado se convierte de TDT a UTC restando ese valor una única vez antes de mostrarlo — un fallo de cálculo que aplicaba esta resta dos veces (y de más, en sentido contrario, en el reloj en vivo) fue precisamente el origen del desfase de ~70 segundos detectado y corregido.</p>
+
+        <h3>Precisión y límites conocidos</h3>
+        <p>Tras corregir ese fallo, el instante de máximo eclipse geocéntrico que calcula la app coincide con el publicado por la NASA al <strong>0.1 segundo</strong>. Aun así, quedan un par de factores que ningún cálculo basado solo en elementos besselianos puede eliminar del todo:</p>
+        <ul>
+          <li><strong>Perfil del borde lunar:</strong> el modelo trata el borde de la Luna como un círculo perfecto. En realidad tiene montañas y valles (por eso existen las perlas de Baily), lo que puede adelantar o retrasar el contacto real 1-3 segundos — la propia NASA cita este mismo margen en sus predicciones.</li>
+          <li><strong>Refracción atmosférica:</strong> no se corrige la ligera curvatura que sufre la luz al atravesar la atmósfera, más notable cuanto más bajo esté el Sol sobre el horizonte (aquí, entre 0° y 20° según el contacto).</li>
+        </ul>
+        <p>En la práctica, esto sitúa la precisión de la app en el entorno de <strong>1-7 segundos</strong> frente a fuentes de referencia como el IGN — más que suficiente para fotografía y observación, pero no absolutamente exacto al fotograma.</p>
+
+        <h3>Fuentes</h3>
+        <ul>
+          <li>Elementos besselianos oficiales: <a href="https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2026Aug12Tbeselm.html" target="_blank" rel="noopener">NASA/GSFC — Fred Espenak, Besselian Elements for the Total Solar Eclipse of 2026 Aug 12</a>.</li>
+          <li>Método de reducción a circunstancias locales: Jean Meeus, <em>Astronomical Algorithms</em>, cap. 54.</li>
+          <li>Contraste independiente de horarios: Instituto Geográfico Nacional (IGN), España.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
   <div id="audio-arm-banner" class="audio-arm-banner" hidden>
-    <span>Se ha recuperado tu última ubicación automáticamente, sin que hayas tocado nada. En iPhone/Safari eso significa que el sonido de los avisos podría no sonar hasta que actives esto:</span>
+    <span>Activa el sonido y los avisos:</span>
     <button type="button" id="btn-arm-audio" class="small primary">Activar sonido y avisos</button>
   </div>
 

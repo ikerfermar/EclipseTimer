@@ -47,6 +47,13 @@ body {
   height: 100%;
 }
 
+html {
+  /* Reduce el tamaño base (16px -> ~14.4px): como casi todo el CSS usa rem,
+     esto encoge el texto de forma proporcional en toda la app sin tener
+     que tocar cada regla suelta. */
+  font-size: 90%;
+}
+
 [hidden] {
   display: none !important;
 }
@@ -60,7 +67,6 @@ body {
   flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
-  padding-bottom: calc(2.5rem + env(safe-area-inset-bottom));
   overscroll-behavior-y: contain;
 }
 
@@ -75,8 +81,131 @@ body {
 }
 
 header {
+  position: relative;
   padding: calc(1.75rem + env(safe-area-inset-top)) 1.1rem 1.25rem;
   border-bottom: 1px solid var(--line);
+}
+
+.about-toggle {
+  position: absolute;
+  top: calc(1.1rem + env(safe-area-inset-top));
+  right: 1.1rem;
+  min-height: 34px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: #c8c3b5;
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.about-toggle span {
+  color: var(--corona);
+  font-size: 0.9rem;
+}
+
+.about-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.92);
+  overflow-y: auto;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.about-panel[hidden] {
+  display: none;
+}
+
+.about-panel-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 1.5rem 1.1rem 3rem;
+}
+
+.about-panel-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0 1rem;
+  background: rgba(0, 0, 0, 0.92);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1.25rem;
+}
+
+.about-body {
+  /* El resto de la app usa una escala compacta (raíz al 90%) pensada para
+     datos de un vistazo. Este panel es texto largo para leer de verdad, así
+     que fijamos un tamaño en px, independiente de esa escala, dentro del
+     rango recomendado (16-18px) para lectura cómoda en móvil. */
+  font-size: 17px;
+  line-height: 1.65;
+  color: #d9d5c8;
+  text-align: justify;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -webkit-hyphenate-limit-before: 3;
+  -webkit-hyphenate-limit-after: 3;
+}
+
+.about-body > p:first-child {
+  font-size: 1.06em;
+  color: #f2efe6;
+}
+
+.about-body h3 {
+  font-family: var(--font);
+  font-weight: 600;
+  font-size: 1.18em;
+  letter-spacing: 0.01em;
+  color: var(--corona);
+  margin: 1.7rem 0 0.6rem;
+  text-align: left;
+}
+
+.about-body p,
+.about-body ul,
+.about-body ol {
+  margin: 0 0 0.9rem;
+}
+
+.about-body ul,
+.about-body ol {
+  padding-left: 1.2rem;
+  text-align: left;
+}
+
+.about-body li {
+  margin-bottom: 0.55rem;
+  text-align: justify;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+}
+
+.about-body code {
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.92em;
+  background: rgba(224, 172, 92, 0.12);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  color: var(--corona);
+}
+
+.about-body a {
+  color: var(--corona);
+}
+
+.about-body strong {
+  color: #f2efe6;
+  font-weight: 600;
 }
 
 .audio-arm-banner {
@@ -130,13 +259,6 @@ h1 {
   font-size: 1.7rem;
   line-height: 1.2;
   letter-spacing: -0.01em;
-}
-
-.subtitle {
-  font-size: 0.85rem;
-  color: #a8a49a;
-  margin-top: 0.5rem;
-  line-height: 1.5;
 }
 
 section {
@@ -680,41 +802,10 @@ body.kiosk .contact-geo.active {
   padding-top: 0;
 }
 
-.alerts-note,
-.alerts-glasses-note {
-  font-size: 0.76rem;
-  color: #8b8779;
-  margin-top: 0.45rem;
-  line-height: 1.45;
-}
-
-.alerts-glasses-note {
-  margin-top: 0.75rem;
-  color: #a8a49a;
-}
-
-.alerts-row {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 0.65rem;
-  margin-top: 0.7rem;
-  cursor: pointer;
-}
-
-.alerts-row input[type="checkbox"],
 .alerts-master-toggle input[type="checkbox"] {
   width: 1rem;
   height: 1rem;
   accent-color: var(--corona);
-}
-
-.alerts-row-main {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.9rem;
-  min-width: 0;
 }
 
 .alerts-row-title {
@@ -799,7 +890,7 @@ body.kiosk #btn-fullscreen {
 
 footer {
   margin-top: auto;
-  padding: 1.75rem 1.25rem 2.5rem;
+  padding: 1.75rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
   font-size: 0.72rem;
   color: #6b6759;
   line-height: 1.6;

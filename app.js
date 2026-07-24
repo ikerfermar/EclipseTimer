@@ -308,9 +308,12 @@ function computeContacts(latDeg, lonEastDeg, heightM) {
 }
 
 function tToDate(tTDT) {
-  const utHours = tTDT - DELTA_T / 3600;
+  // baseUTC ya es el instante UTC de t0 (18:00:00 TDT − ΔT). tTDT es una
+  // DURACION transcurrida desde t0, y una duración vale lo mismo en TDT que
+  // en UT (solo cambia la época/lectura del reloj, no el ritmo). Por tanto
+  // se suma tal cual, sin restar ΔT una segunda vez.
   const baseUTC = Date.UTC(2026, 7, 12, 18, 0, 0) - DELTA_T * 1000;
-  return new Date(baseUTC + utHours * 3600 * 1000);
+  return new Date(baseUTC + tTDT * 3600 * 1000);
 }
 
 // Antes se forzaba "Europe/Madrid" (fmtMadrid), pero la totalidad del 12 de
@@ -355,11 +358,18 @@ function setLocStatus(msg, cls) {
   el.className = `coord-status${cls ? ` ${cls}` : ""}`;
 }
 
+function setHemiButton(btn, value, defaultValue) {
+  btn.dataset.value = value;
+  btn.textContent = value;
+  btn.setAttribute("aria-pressed", value !== defaultValue ? "true" : "false");
+}
+
 function setupHemiToggle(btnId, pair) {
   const btn = $(btnId);
+  setHemiButton(btn, btn.dataset.value || pair[0], pair[0]);
   btn.addEventListener("click", () => {
-    btn.dataset.value = btn.dataset.value === pair[0] ? pair[1] : pair[0];
-    btn.textContent = btn.dataset.value;
+    const next = btn.dataset.value === pair[0] ? pair[1] : pair[0];
+    setHemiButton(btn, next, pair[0]);
   });
 }
 
@@ -377,14 +387,12 @@ function readLon() {
 
 function writeLat(val) {
   $("in-lat").value = Math.abs(val).toFixed(4);
-  $("lat-hemi").dataset.value = val < 0 ? "S" : "N";
-  $("lat-hemi").textContent = $("lat-hemi").dataset.value;
+  setHemiButton($("lat-hemi"), val < 0 ? "S" : "N", "N");
 }
 
 function writeLon(val) {
   $("in-lon").value = Math.abs(val).toFixed(4);
-  $("lon-hemi").dataset.value = val < 0 ? "O" : "E";
-  $("lon-hemi").textContent = $("lon-hemi").dataset.value;
+  setHemiButton($("lon-hemi"), val < 0 ? "O" : "E", "O");
 }
 
 async function acquireWakeLock() {
@@ -503,7 +511,7 @@ function locateUser() {
       state.locating = false;
       updateLocateButton();
 
-      const safariHint = "Safari ha bloqueado la ubicación. Revisa Ajustes del sitio web > Ubicación > Permitir, comprueba Ajustes de iPhone > Privacidad y seguridad > Localización > Safari Websites y recarga la página.";
+      const safariHint = "Ubicación bloqueada. Actívala en Ajustes > Privacidad y seguridad > Localización > Safari, y recarga.";
 
       if (isLikelySafariIOS()) {
         setLocStatus(safariHint, "err");
@@ -620,7 +628,7 @@ function renderContacts() {
 
   const note = $("duration-note");
   if (c.c1 === null) {
-    note.textContent = "No visible desde estas coordenadas: quedan fuera de la franja de penumbra del eclipse (ni siquiera se ve como fase parcial).";
+    note.textContent = "No visible desde estas coordenadas: fuera de la franja del eclipse.";
   } else {
     const totalDurSec = (c.c4 - c.c1) * 3600;
     const totalMin = Math.floor(totalDurSec / 60);
@@ -635,7 +643,7 @@ function renderContacts() {
       msg = `Fuera de la franja de totalidad: solo parcial · Duración: ${totalMin} min ${totalS} s.`;
     }
     if (eclipseMostlyBelowHorizon(c)) {
-      msg += " Aviso: el Sol está bajo el horizonte durante todo el evento en estas coordenadas, así que no podrás verlo aunque el cálculo sea correcto.";
+      msg += " Aviso: el Sol está bajo el horizonte todo el evento; no se verá desde aquí.";
     }
     note.textContent = msg;
   }
@@ -650,8 +658,10 @@ function currentTUTC() {
 
   const now = new Date();
   const baseUTC = Date.UTC(2026, 7, 12, 18, 0, 0) - DELTA_T * 1000;
-  const utHours = (now.getTime() - baseUTC) / 3600000;
-  return utHours + DELTA_T / 3600;
+  // Horas transcurridas desde el instante UTC de t0 = t en el dominio TDT
+  // usado por los elementos besselianos (ver nota en tToDate). No se sube
+  // ni resta ΔT aquí otra vez.
+  return (now.getTime() - baseUTC) / 3600000;
 }
 
 function getSharedAudioContext() {
@@ -732,13 +742,27 @@ function speak(text, options = {}) {
   return true;
 }
 
+// Chrome en Android lanza "Illegal constructor" si se usa `new Notification()`
+// directamente: solo soporta notificaciones vía ServiceWorkerRegistration.
+// showNotification(). Desktop y Safari sí soportan el constructor directo,
+// así que lo dejamos como último recurso si no hay service worker listo.
 function notify(title, body) {
-  if ("Notification" in window && Notification.permission === "granted") {
-    try {
-      new Notification(title, { body });
-    } catch (_) {
-      // ignore notification failures
-    }
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.ready
+      .then((reg) => reg.showNotification(title, { body }))
+      .catch(() => {
+        // Sin service worker activo todavía: no hay nada más que intentar
+        // en plataformas que exigen la ruta del SW (p. ej. Android).
+      });
+    return;
+  }
+
+  try {
+    new Notification(title, { body });
+  } catch (_) {
+    // ignore notification failures
   }
 }
 
@@ -1342,6 +1366,24 @@ function exitKiosk() {
 }
 
 function bindEvents() {
+  const aboutPanel = $("about-panel");
+  const openAbout = () => {
+    aboutPanel.hidden = false;
+    document.body.style.overflow = "hidden";
+  };
+  const closeAbout = () => {
+    aboutPanel.hidden = true;
+    document.body.style.overflow = "";
+  };
+  $("btn-about").addEventListener("click", openAbout);
+  $("btn-about-close").addEventListener("click", closeAbout);
+  aboutPanel.addEventListener("click", (ev) => {
+    if (ev.target === aboutPanel) closeAbout();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !aboutPanel.hidden) closeAbout();
+  });
+
   setupHemiToggle("lat-hemi", ["N", "S"]);
   setupHemiToggle("lon-hemi", ["O", "E"]);
 
@@ -1459,9 +1501,28 @@ function bindEvents() {
 // que el botón simplemente no aparece ahí; conviven bien.
 let deferredInstallPrompt = null;
 
+function isStandaloneDisplay() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function showIOSInstallHelp() {
+  const help = $("ios-install-help");
+  if (help) help.hidden = false;
+}
+
+function hideIOSInstallHelp() {
+  const help = $("ios-install-help");
+  if (help) help.hidden = true;
+}
+
 function bindInstallPrompt() {
   const btn = $("btn-install");
   if (!btn) return;
+
+  // Ya instalada (standalone): no hace falta ofrecer instalarla de nuevo.
+  if (isStandaloneDisplay()) return;
+
+  const isIOS = isLikelySafariIOS();
 
   window.addEventListener("beforeinstallprompt", (ev) => {
     ev.preventDefault();
@@ -1469,20 +1530,38 @@ function bindInstallPrompt() {
     btn.style.display = "inline-block";
   });
 
+  // iOS Safari nunca dispara beforeinstallprompt (no lo soporta), así que
+  // ahí mostramos el botón igualmente: al tocarlo no hay prompt de sistema,
+  // solo instrucciones manuales (Compartir > Añadir a pantalla de inicio).
+  if (isIOS) {
+    btn.style.display = "inline-block";
+  }
+
   btn.addEventListener("click", async () => {
-    if (!deferredInstallPrompt) return;
-    btn.disabled = true;
-    try {
-      deferredInstallPrompt.prompt();
-      await deferredInstallPrompt.userChoice;
-    } catch (_) {
-      // ignore
-    } finally {
-      deferredInstallPrompt = null;
-      btn.style.display = "none";
-      btn.disabled = false;
+    if (deferredInstallPrompt) {
+      btn.disabled = true;
+      try {
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+      } catch (_) {
+        // ignore
+      } finally {
+        deferredInstallPrompt = null;
+        btn.style.display = "none";
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    if (isIOS) {
+      showIOSInstallHelp();
     }
   });
+
+  const closeHelpBtn = $("btn-ios-install-close");
+  if (closeHelpBtn) {
+    closeHelpBtn.addEventListener("click", hideIOSInstallHelp);
+  }
 
   window.addEventListener("appinstalled", () => {
     deferredInstallPrompt = null;
