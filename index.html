@@ -4,34 +4,63 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<meta name="description" content="Cronometro de eclipse total con tiempos locales, avisos y modo sin conexion.">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Cronómetro de eclipse total con tiempos locales, avisos y modo sin conexión.">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Eclipse 2026">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/images/logo-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/images/logo-180.png">
 <link rel="manifest" href="manifest.webmanifest">
+<!-- Splash screens de iOS: evitan el parpadeo blanco al abrir la app antes
+     de que se pinte el fondo negro. Safari no soporta el manifest para esto,
+     así que hace falta un apple-touch-startup-image por tamaño de pantalla. -->
+<link rel="apple-touch-startup-image" href="assets/splash/iphone-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="assets/splash/iphone-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="assets/splash/iphone-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="assets/splash/iphone-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="assets/splash/iphone-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="assets/splash/iphone-1242x2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="assets/splash/iphone-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
+<link rel="apple-touch-startup-image" href="assets/splash/iphone-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
+<link rel="apple-touch-startup-image" href="assets/splash/ipad-1620x2160.png" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2)">
+<link rel="apple-touch-startup-image" href="assets/splash/ipad-1668x2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)">
+<link rel="apple-touch-startup-image" href="assets/splash/ipad-2048x2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)">
+<!-- Variantes en horizontal para iPad (portrait-only antes dejaba sin
+     splash a quien abre la app apaisada). -->
+<link rel="apple-touch-startup-image" href="assets/splash/ipad-2160x1620.png" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+<link rel="apple-touch-startup-image" href="assets/splash/ipad-2388x1668.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+<link rel="apple-touch-startup-image" href="assets/splash/ipad-2732x2048.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+<link rel="preload" href="assets/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 <title>Eclipse - 12 agosto 2026</title>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="eyebrow">Cronometro de eclipse</div>
+    <div class="eyebrow">Cronómetro de eclipse</div>
     <div class="title-row">
       <img src="assets/images/logo-96.png" width="96" height="96" fetchpriority="high" decoding="async" alt="Logo EclipseTimer" class="brand-logo">
       <h1>Eclipse total<br>12 agosto 2026</h1>
     </div>
+    <button type="button" id="btn-install" class="small" style="display:none; margin-top:.75rem;" aria-label="Instalar la aplicación en el dispositivo">Instalar app</button>
   </header>
+
+  <div id="audio-arm-banner" class="audio-arm-banner" hidden>
+    <span>Se ha recuperado tu última ubicación automáticamente, sin que hayas tocado nada. En iPhone/Safari eso significa que el sonido de los avisos podría no sonar hasta que actives esto:</span>
+    <button type="button" id="btn-arm-audio" class="small primary">Activar sonido y avisos</button>
+  </div>
 
   <section id="loc-section" class="accordion-section is-open">
     <button type="button" class="section-toggle" data-section="loc-section" aria-expanded="true" aria-controls="loc-section-body">
-      <span class="section-title">Ubicacion</span>
+      <span class="section-title">Ubicación</span>
       <span class="section-toggle-icon" aria-hidden="true"></span>
     </button>
     <div class="section-body" id="loc-section-body">
     <div class="loc-row">
-      <button class="primary" id="btn-locate" aria-label="Obtener ubicacion GPS">Usar mi ubicacion</button>
+      <button class="primary" id="btn-locate" aria-label="Obtener ubicación GPS">Usar mi ubicación</button>
       <button class="small" id="btn-leon" aria-label="Cargar coordenadas de León">Usar León</button>
     </div>
     <div class="coord-grid">
@@ -58,9 +87,9 @@
         <span id="loc-source" style="font-size:.8rem; padding-top:.5rem;">sin datos</span>
       </div>
     </div>
-    <div class="coord-status" id="loc-status" aria-live="polite">Automatica o manual.</div>
+    <div class="coord-status" id="loc-status" aria-live="polite">Automática o manual.</div>
     <div class="loc-actions-bottom">
-      <button class="small secondary" id="btn-recalc" aria-label="Recalcular con coordenadas actuales">Actualizar calculo</button>
+      <button class="small secondary" id="btn-recalc" aria-label="Recalcular con coordenadas actuales">Actualizar cálculo</button>
     </div>
     </div>
   </section>
@@ -69,20 +98,20 @@
     <div id="disk-section" class="stack-block">
       <div class="section-title">Estado actual</div>
       <div class="disk-wrap">
-        <svg id="disk-svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Visualizacion del estado del eclipse"></svg>
+        <svg id="disk-svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Visualización del estado del eclipse"></svg>
         <div class="phase-name" id="phase-name">-</div>
         <div class="mag-readout">
           <div class="num" id="mag-num">0%</div>
-          <div class="unit">obscuracion</div>
+          <div class="unit">magnitud</div>
         </div>
         <div class="sun-geo" id="sun-geo">-</div>
       </div>
     </div>
 
     <div id="countdown-section" class="stack-block">
-      <div class="section-title">Cuenta atras</div>
+      <div class="section-title">Cuenta atrás</div>
       <div class="countdown">
-        <div class="next-label" id="cd-label">proximo contacto</div>
+        <div class="next-label" id="cd-label">próximo contacto</div>
         <div class="clock" id="cd-clock">--:--:--</div>
         <div class="event-name" id="cd-event">-</div>
       </div>
@@ -92,7 +121,7 @@
     </div>
 
     <div id="contacts-section" class="stack-block">
-      <div class="section-title">Contactos (CEST)</div>
+      <div class="section-title">Contactos (hora local)</div>
       <div id="contacts-list"></div>
       <div class="duration-note" id="duration-note"></div>
     </div>
@@ -145,8 +174,8 @@
   </section>
 
   <div id="alert-banner" style="display:none; position:fixed; inset:0; z-index:999; align-items:center; justify-content:center; text-align:center; padding:2rem; flex-direction:column; gap:.75rem; background:rgba(0,0,0,.95); color:#e9e6dd; border-top:6px solid #e0ac5c;" aria-live="assertive" aria-hidden="true">
-    <div id="alert-banner-tag" style="font-family:'Consolas', 'Courier New', monospace; font-size:.85rem; letter-spacing:.14em; text-transform:uppercase;"></div>
-    <div id="alert-banner-text" style="font-family:'Georgia', 'Times New Roman', serif; font-size:2.1rem; line-height:1.15;"></div>
+    <div id="alert-banner-tag" style="font-family:'Inter',-apple-system,'Roboto',sans-serif; font-weight:600; font-size:.85rem; letter-spacing:.14em; text-transform:uppercase;"></div>
+    <div id="alert-banner-text" style="font-family:'Inter',-apple-system,'Roboto',sans-serif; font-weight:600; font-size:2.1rem; line-height:1.15;"></div>
     <button id="alert-banner-dismiss" class="small" style="margin-top:1rem; border-color:currentColor; color:inherit;">Cerrar</button>
   </div>
 

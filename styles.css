@@ -1,4 +1,28 @@
-﻿:root {
+﻿@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/fonts/inter-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/fonts/inter-500.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/fonts/inter-600.woff2") format("woff2");
+}
+
+:root {
   --ink: #000000;
   --paper: #e9e6dd;
   --paper-dim: #d9d5c8;
@@ -8,6 +32,7 @@
   --line: #3a3f47;
   --line-light: #c7c2b3;
   --ok: #5f7a5e;
+  --font: "Inter", -apple-system, "Roboto", "Segoe UI", sans-serif;
 }
 
 * {
@@ -29,7 +54,7 @@ body {
 body {
   background-color: #000000;
   color: var(--paper);
-  font-family: "Segoe UI", "Noto Sans", Arial, sans-serif;
+  font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   display: flex;
   flex-direction: column;
@@ -54,6 +79,26 @@ header {
   border-bottom: 1px solid var(--line);
 }
 
+.audio-arm-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem 1.1rem;
+  background: rgba(224, 172, 92, 0.1);
+  border-bottom: 1px solid var(--corona);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #e9e6dd;
+}
+
+.audio-arm-banner[hidden] {
+  display: none;
+}
+
+.audio-arm-banner button {
+  align-self: flex-start;
+}
+
 .title-row {
   display: flex;
   align-items: center;
@@ -69,7 +114,9 @@ header {
 }
 
 .eyebrow {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
   font-size: 0.7rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -78,7 +125,7 @@ header {
 }
 
 h1 {
-  font-family: "Segoe UI", "Noto Sans", Arial, sans-serif;
+  font-family: var(--font);
   font-weight: 600;
   font-size: 1.7rem;
   line-height: 1.2;
@@ -111,7 +158,9 @@ section {
 }
 
 .section-title {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
   font-size: 0.68rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -250,7 +299,8 @@ button.secondary {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.7rem 1rem;
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
 }
 
 .coord-field {
@@ -260,6 +310,7 @@ button.secondary {
 }
 
 .coord-field span {
+  font-weight: 600;
   font-size: 0.65rem;
   color: #8b8779;
   letter-spacing: 0.06em;
@@ -272,7 +323,8 @@ button.secondary {
 }
 
 .hemi-toggle {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--corona);
@@ -289,7 +341,8 @@ button.secondary {
   border: none;
   border-bottom: 1px solid var(--line-light);
   color: var(--paper);
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   font-size: 1rem;
   padding: 0.5rem 0;
 }
@@ -327,7 +380,8 @@ svg {
 }
 
 .mag-readout {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
@@ -344,7 +398,7 @@ svg {
 }
 
 .phase-name {
-  font-family: "Segoe UI", "Noto Sans", Arial, sans-serif;
+  font-family: var(--font);
   font-size: 1.05rem;
   font-weight: 600;
   text-align: center;
@@ -353,7 +407,9 @@ svg {
 }
 
 .sun-geo {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
   font-size: 0.72rem;
   color: #8b8779;
   text-align: center;
@@ -361,7 +417,8 @@ svg {
 
 .contact-geo {
   grid-column: 1 / -1;
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   font-size: 0.68rem;
   color: #6b6759;
   margin-top: -0.35rem;
@@ -529,7 +586,9 @@ body.kiosk .contact .desc {
 }
 
 .countdown .next-label {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
   font-size: 0.7rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -537,16 +596,16 @@ body.kiosk .contact .desc {
 }
 
 .countdown .clock {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   font-size: 2.8rem;
   font-weight: 500;
-  font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   margin: 0.35rem 0;
 }
 
 .countdown .event-name {
-  font-family: "Segoe UI", "Noto Sans", Arial, sans-serif;
+  font-family: var(--font);
   font-size: 1rem;
   font-weight: 600;
   color: var(--paper);
@@ -566,7 +625,9 @@ body.kiosk .contact .desc {
 }
 
 .contact .tag {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
   font-size: 0.75rem;
   color: var(--corona);
 }
@@ -577,9 +638,9 @@ body.kiosk .contact .desc {
 }
 
 .contact .time {
-  font-family: "Consolas", "Courier New", monospace;
-  font-size: 1.15rem;
+  font-family: var(--font);
   font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
 }
 
 .contact.na .time,
@@ -662,7 +723,9 @@ body.kiosk .contact-geo.active {
 }
 
 .alerts-row-time {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
   font-size: 0.72rem;
   color: var(--corona);
   white-space: nowrap;
@@ -696,7 +759,9 @@ body.kiosk .contact-geo.active {
 }
 
 .duration-note {
-  font-family: "Consolas", "Courier New", monospace;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
   font-size: 0.78rem;
   color: #8b8779;
   margin-top: 0.65rem;
