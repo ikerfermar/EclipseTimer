@@ -1,14 +1,14 @@
 "use strict";
 
-const CACHE_VERSION = "eclipsetimer-v26";
-// Los splash screens de iOS (assets/splash/*) se han sacado a propósito de
-// este precache: solo los pide Safari en iOS/iPadOS, así que precachearlos
-// aquí obligaba a Android a descargar ~1.6MB que nunca va a usar. El
-// manejador de "fetch" de abajo ya los cachea la primera vez que Safari los
-// pida (stale-while-revalidate), así que siguen funcionando offline igual.
+const CACHE_VERSION = "eclipsetimer-v45";
+const UPDATE_TIMEOUT_MS = 1500;
+
+// iOS splash screens are requested only by Safari/iPadOS. They are cached on
+// first request instead of being forced into the app shell for every platform.
 const APP_SHELL = [
   "./",
   "index.html",
+  "alerts.json",
   "styles.css",
   "app.js",
   "manifest.webmanifest",
@@ -17,12 +17,52 @@ const APP_SHELL = [
   "assets/images/logo-96.png",
   "assets/images/logo-180.png",
   "assets/images/logo-192.png",
-  "assets/images/logo-512.png",
-  "assets/images/logo-512-maskable.png",
   "assets/fonts/inter-400.woff2",
   "assets/fonts/inter-500.woff2",
   "assets/fonts/inter-600.woff2"
 ];
+
+const CORE_UPDATE_URLS = new Set([
+  new URL("./", self.location).href,
+  new URL("index.html", self.location).href,
+  new URL("alerts.json", self.location).href,
+  new URL("styles.css", self.location).href,
+  new URL("app.js", self.location).href,
+  new URL("manifest.webmanifest", self.location).href
+]);
+
+function cacheResponse(request, response) {
+  if (!response || !response.ok) return;
+  const cloned = response.clone();
+  caches.open(CACHE_VERSION).then((cache) => {
+    cache.put(request, cloned).catch(() => {
+      // Ignore opaque/cors/unsupported cache writes.
+    });
+  });
+}
+
+function fetchAndCache(request) {
+  return fetch(request).then((response) => {
+    cacheResponse(request, response);
+    return response;
+  });
+}
+
+function withTimeout(promise, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error("network timeout")), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      }
+    );
+  });
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -32,11 +72,19 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys
-        .filter((key) => key !== CACHE_VERSION)
-        .map((key) => caches.delete(key))
-    )).then(() => self.clients.claim())
+    caches.keys().then((keys) => {
+      const oldAppCaches = keys.filter((key) => key.startsWith("eclipsetimer-") && key !== CACHE_VERSION);
+      return Promise.all(oldAppCaches.map((key) => caches.delete(key)))
+        .then(() => self.clients.claim())
+        .then(() => {
+          if (!oldAppCaches.length) return null;
+          return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+            clients.forEach((client) => {
+              client.postMessage({ type: "ET_FORCE_RELOAD", version: CACHE_VERSION });
+            });
+          });
+        });
+    })
   );
 });
 
@@ -45,35 +93,36 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      // Antes, si algo ya estaba en caché, se servía para siempre sin
-      // volver a comprobar la red hasta el próximo ciclo de vida del SW.
-      // Ahora revalidamos en segundo plano: la respuesta cacheada sigue
-      // siendo instantánea, pero si hay red disponible la caché se
-      // actualiza para la próxima vez, sin esperar a un cambio de versión.
-      const networkFetch = fetch(event.request)
-        .then((response) => {
-          if (response && response.ok) {
-            const cloned = response.clone();
-            caches.open(CACHE_VERSION).then((cache) => {
-              cache.put(event.request, cloned).catch(() => {
-                // Ignore opaque/cors/unsupported cache writes.
-              });
-            });
-          }
-          return response;
-        })
-        .catch(() => null);
+      const url = new URL(event.request.url);
+      const isSameOrigin = url.origin === self.location.origin;
+      const shouldPreferFresh = event.request.mode === "navigate" || (isSameOrigin && CORE_UPDATE_URLS.has(url.href));
+      let networkFetch = null;
+      const getNetworkFetch = () => {
+        if (!networkFetch) networkFetch = fetchAndCache(event.request).catch(() => null);
+        return networkFetch;
+      };
+      const offlineFallback = () => {
+        if (cached) return cached;
+        if (event.request.mode === "navigate") return caches.match("index.html");
+        return Promise.reject(new Error("offline and not cached"));
+      };
 
-      if (cached) {
-        event.waitUntil(networkFetch.catch(() => {}));
-        return cached;
+      if (shouldPreferFresh) {
+        if (!cached) {
+          return getNetworkFetch().then((response) => response || offlineFallback());
+        }
+        return withTimeout(getNetworkFetch(), UPDATE_TIMEOUT_MS)
+          .then((response) => response || offlineFallback())
+          .catch(() => {
+            event.waitUntil(getNetworkFetch().catch(() => {}));
+            return offlineFallback();
+          });
       }
 
-      return networkFetch.then((response) => {
+      if (cached) return cached;
+
+      return getNetworkFetch().then((response) => {
         if (response) return response;
-        // Only fall back to the app shell for page navigations. For any
-        // other uncached asset (image, font, etc.) let the request fail
-        // normally instead of silently returning the HTML document.
         if (event.request.mode === "navigate") {
           return caches.match("index.html");
         }

@@ -41,22 +41,22 @@
 <body>
 <div class="wrap">
   <header>
-    <button type="button" id="btn-about" class="about-toggle" aria-label="Cómo calcula la app este eclipse" aria-haspopup="dialog">
-      <span aria-hidden="true">ⓘ</span> Cómo funciona
-    </button>
     <div class="eyebrow">Cronómetro de eclipse</div>
     <div class="title-row">
       <img src="assets/images/logo-96.png" width="96" height="96" fetchpriority="high" decoding="async" alt="Logo EclipseTimer" class="brand-logo">
       <h1>Eclipse total<br>12 agosto 2026</h1>
+      <button type="button" id="btn-about" class="about-toggle" aria-label="Cómo calcula la app este eclipse" aria-haspopup="dialog">
+        <span aria-hidden="true">i</span>
+      </button>
     </div>
-    <button type="button" id="btn-install" class="small" style="display:none; margin-top:.75rem;" aria-label="Instalar la aplicación en el dispositivo">Instalar app</button>
+    <button type="button" id="btn-install" class="small" aria-label="Instalar la aplicación en el dispositivo" hidden>Instalar app</button>
     <div id="ios-install-help" class="audio-arm-banner" hidden>
       <span>Toca compartir (el icono ⬆︎ de Safari) y luego «Añadir a pantalla de inicio».</span>
       <button type="button" id="btn-ios-install-close" class="small">Entendido</button>
     </div>
   </header>
 
-  <div id="about-panel" class="about-panel" hidden role="dialog" aria-modal="true" aria-labelledby="about-panel-title">
+  <div id="about-panel" class="about-panel" hidden role="dialog" aria-modal="true" aria-labelledby="about-panel-title" tabindex="-1">
     <div class="about-panel-inner">
       <div class="about-panel-header">
         <span class="section-title" id="about-panel-title">Cómo funciona</span>
@@ -64,44 +64,62 @@
       </div>
 
       <div class="about-body">
-        <p>Esta app calcula los instantes exactos del eclipse (C1-C4) para tu ubicación mediante <strong>elementos besselianos</strong>, el método estándar en astronomía de posición para predecir eclipses solares — el mismo que usan la NASA, el IGN o cualquier efeméride profesional.</p>
+        <p>Esta app calcula C1-C4 para tu ubicación con elementos besselianos, el método estándar de las efemérides profesionales. Los avisos son una ayuda práctica para observar y fotografiar, pero la decisión final de quitar o poner protección debe basarse siempre en el brillo real del Sol.</p>
 
-        <h3>Qué son los elementos besselianos</h3>
-        <p>En vez de calcular la posición del Sol y la Luna paso a paso, se proyecta la sombra de la Luna sobre un plano imaginario que pasa por el centro de la Tierra (el «plano fundamental»). Seis parámetros — x, y (posición del eje de la sombra), d (declinación), l1, l2 (radios de la penumbra y la umbra) y μ (ángulo horario) — descritos como polinomios de tercer grado en el tiempo bastan para reconstruir la geometría completa de la sombra en cualquier instante cercano al eclipse.</p>
-
-        <h3>Cómo se calculan tus horarios locales</h3>
-        <ol>
-          <li>Tus coordenadas (latitud, longitud, altitud) se convierten a coordenadas geocéntricas rectangulares, corrigiendo el achatamiento de la Tierra.</li>
-          <li>Para un instante <code>t</code> cualquiera, se evalúan los polinomios besselianos y se calcula la distancia entre tu posición y el eje de la sombra proyectada.</li>
-          <li>Se compara esa distancia con los radios de la penumbra (l1) y la umbra (l2) para saber si en ese instante el eclipse es parcial, total o no ha empezado.</li>
-          <li>Se recorre el eje temporal buscando los cambios de signo (dónde tu posición entra o sale de cada sombra) y se refina cada cruce por bisección hasta obtener el instante con precisión de milisegundos: así se obtienen C1, C2, C3 y C4.</li>
-        </ol>
-
-        <h3>ΔT: por qué la hora "astronómica" no es la del reloj</h3>
-        <p>Los elementos besselianos están referidos a Tiempo Dinámico Terrestre (TDT), una escala de tiempo uniforme que no depende de la rotación de la Tierra. La hora civil (UTC), en cambio, sí depende de esa rotación, que se frena de forma leve e irregular por la fricción de marea. La diferencia entre ambas escalas se llama <strong>ΔT</strong>; para este eclipse concreto, la NASA la fija en <strong>71.4 segundos</strong>. Cada resultado se convierte de TDT a UTC restando ese valor una única vez antes de mostrarlo — un fallo de cálculo que aplicaba esta resta dos veces (y de más, en sentido contrario, en el reloj en vivo) fue precisamente el origen del desfase de ~70 segundos detectado y corregido.</p>
-
-        <h3>Precisión y límites conocidos</h3>
-        <p>Tras corregir ese fallo, el instante de máximo eclipse geocéntrico que calcula la app coincide con el publicado por la NASA al <strong>0.1 segundo</strong>. Aun así, quedan un par de factores que ningún cálculo basado solo en elementos besselianos puede eliminar del todo:</p>
+        <h3>Resumen</h3>
         <ul>
-          <li><strong>Perfil del borde lunar:</strong> el modelo trata el borde de la Luna como un círculo perfecto. En realidad tiene montañas y valles (por eso existen las perlas de Baily), lo que puede adelantar o retrasar el contacto real 1-3 segundos — la propia NASA cita este mismo margen en sus predicciones.</li>
-          <li><strong>Refracción atmosférica:</strong> no se corrige la ligera curvatura que sufre la luz al atravesar la atmósfera, más notable cuanto más bajo esté el Sol sobre el horizonte (aquí, entre 0° y 20° según el contacto).</li>
+          <li>Usa tu latitud, longitud y altitud para calcular los contactos locales del eclipse.</li>
+          <li>Convierte la hora astronómica a hora civil aplicando ΔT una sola vez.</li>
+          <li>Aplica un pequeño margen de seguridad a los avisos de gafas y filtro.</li>
+          <li>Para usarla sin conexión, ábrela una vez con conexión antes del eclipse.</li>
         </ul>
-        <p>En la práctica, esto sitúa la precisión de la app en el entorno de <strong>1-7 segundos</strong> frente a fuentes de referencia como el IGN — más que suficiente para fotografía y observación, pero no absolutamente exacto al fotograma.</p>
 
-        <h3>Fuentes</h3>
-        <ul>
-          <li>Elementos besselianos oficiales: <a href="https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2026Aug12Tbeselm.html" target="_blank" rel="noopener">NASA/GSFC — Fred Espenak, Besselian Elements for the Total Solar Eclipse of 2026 Aug 12</a>.</li>
-          <li>Método de reducción a circunstancias locales: Jean Meeus, <em>Astronomical Algorithms</em>, cap. 54.</li>
-          <li>Contraste independiente de horarios: Instituto Geográfico Nacional (IGN), España.</li>
-        </ul>
+        <details class="technical-details">
+          <summary>Detalles técnicos y fuentes</summary>
+
+          <h3>Detalles técnicos</h3>
+          <p>En vez de calcular la posición del Sol y la Luna paso a paso, se proyecta la sombra de la Luna sobre un plano imaginario que pasa por el centro de la Tierra (el «plano fundamental»). Seis parámetros — x, y (posición del eje de la sombra), d (declinación), l1, l2 (radios de la penumbra y la umbra) y μ (ángulo horario) — descritos como polinomios de tercer grado permiten reconstruir la geometría de la sombra en cualquier instante cercano al eclipse.</p>
+
+          <h3>Cómo se calculan tus horarios locales</h3>
+          <ol>
+            <li>Tus coordenadas (latitud, longitud, altitud) se convierten a coordenadas geocéntricas rectangulares, corrigiendo el achatamiento de la Tierra.</li>
+            <li>Para un instante <code>t</code> cualquiera, se evalúan los polinomios besselianos y se calcula la distancia entre tu posición y el eje de la sombra proyectada.</li>
+            <li>Se compara esa distancia con los radios de la penumbra (l1) y la umbra (l2) para saber si en ese instante el eclipse es parcial, total o no ha empezado.</li>
+            <li>Se recorre el eje temporal buscando dónde tu posición entra o sale de cada sombra y se refina cada cruce por bisección: así se obtienen C1, C2, C3 y C4.</li>
+          </ol>
+
+          <h3>ΔT: por qué la hora "astronómica" no es la del reloj</h3>
+          <p>Los elementos besselianos están referidos a Tiempo Dinámico Terrestre (TDT), una escala de tiempo uniforme que no depende de la rotación de la Tierra. La hora civil (UTC), en cambio, sí depende de esa rotación, que se frena de forma leve e irregular por la fricción de marea. La diferencia entre ambas escalas se llama <strong>ΔT</strong>; para este eclipse concreto, la NASA la fija en <strong>71.4 segundos</strong>. Cada resultado se convierte de TDT a UTC restando ese valor una única vez antes de mostrarlo — un fallo de cálculo que aplicaba esta resta dos veces (y de más, en sentido contrario, en el reloj en vivo) fue precisamente el origen del desfase de ~70 segundos detectado y corregido.</p>
+
+          <h3>Precisión y límites conocidos</h3>
+          <p>Tras corregir ese fallo, el instante de máximo eclipse geocéntrico que calcula la app coincide con el publicado por la NASA al <strong>0.1 segundo</strong>. Aun así, quedan un par de factores que ningún cálculo basado solo en elementos besselianos puede eliminar del todo:</p>
+          <ul>
+            <li><strong>Perfil del borde lunar:</strong> el modelo trata el borde de la Luna como un círculo perfecto. En realidad tiene montañas y valles (por eso existen las perlas de Baily), lo que puede adelantar o retrasar el contacto real 1-3 segundos — la propia NASA cita este mismo margen en sus predicciones.</li>
+            <li><strong>Refracción atmosférica:</strong> no se corrige la ligera curvatura que sufre la luz al atravesar la atmósfera, más notable cuanto más bajo esté el Sol sobre el horizonte (aquí, entre 0° y 20° según el contacto).</li>
+          </ul>
+          <p>En la práctica, esto sitúa la precisión de la app en el entorno de <strong>1-7 segundos</strong> frente a fuentes de referencia como el IGN — más que suficiente para fotografía y observación, pero no absolutamente exacto al fotograma.</p>
+
+          <h3>Avisos de gafas y filtro fotográfico</h3>
+          <p>Los avisos de "quitar/poner gafas" y "quitar/poner filtro" no se disparan exactamente en el C2/C3 calculado: se aplica un pequeño margen de seguridad hacia el lado prudente (más tarde para quitar protección, más pronto para volver a ponerla). Este margen es intencionadamente menor que el error máximo observado (1-7 s), así que sigue siendo una ayuda, no una garantía. Si conoces una corrección más precisa de C2/C3 para tu ubicación exacta, puedes introducirla en el campo "Corrección C2/C3" de la sección Ubicación.</p>
+
+          <h3>Fuentes</h3>
+          <ul>
+            <li>Elementos besselianos oficiales: <a href="https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2026Aug12Tbeselm.html" target="_blank" rel="noopener">NASA/GSFC — Fred Espenak, Besselian Elements for the Total Solar Eclipse of 2026 Aug 12</a>.</li>
+            <li>Método de reducción a circunstancias locales: Jean Meeus, <em>Astronomical Algorithms</em>, cap. 54.</li>
+            <li>Contraste independiente de horarios: Instituto Geográfico Nacional (IGN), España.</li>
+          </ul>
+        </details>
       </div>
     </div>
   </div>
 
   <div id="audio-arm-banner" class="audio-arm-banner" hidden>
-    <span>Activa el sonido y los avisos:</span>
-    <button type="button" id="btn-arm-audio" class="small primary">Activar sonido y avisos</button>
+    <span>Activa el sonido para los avisos. Las notificaciones son opcionales.</span>
+    <button type="button" id="btn-arm-audio" class="small primary">Activar avisos</button>
+    <span id="alert-channel-status" class="alert-channel-status"></span>
   </div>
+
+  <div id="offline-status" class="offline-status" hidden aria-live="polite"></div>
 
   <section id="loc-section" class="accordion-section is-open">
     <button type="button" class="section-toggle" data-section="loc-section" aria-expanded="true" aria-controls="loc-section-body">
@@ -110,8 +128,8 @@
     </button>
     <div class="section-body" id="loc-section-body">
     <div class="loc-row">
-      <button class="primary" id="btn-locate" aria-label="Obtener ubicación GPS">Usar mi ubicación</button>
-      <button class="small" id="btn-leon" aria-label="Cargar coordenadas de León">Usar León</button>
+      <button type="button" class="primary" id="btn-locate" aria-label="Obtener ubicación GPS">Usar mi ubicación</button>
+      <button type="button" class="small" id="btn-leon" aria-label="Cargar coordenadas de León">León</button>
     </div>
     <div class="coord-grid">
       <div class="coord-field">
@@ -134,12 +152,17 @@
       </div>
       <div class="coord-field">
         <span>Estado</span>
-        <span id="loc-source" style="font-size:.8rem; padding-top:.5rem;">sin datos</span>
+        <span id="loc-source" class="loc-source">sin ubicación</span>
+      </div>
+      <div class="coord-field">
+        <span>Corrección C2/C3 (s)</span>
+        <input id="in-manual-offset" type="number" step="1" inputmode="numeric" value="0" aria-label="Corrección manual en segundos para C2 y C3, por perfil del limbo lunar">
       </div>
     </div>
-    <div class="coord-status" id="loc-status" aria-live="polite">Automática o manual.</div>
+    <div class="coord-status" id="loc-status" aria-live="polite">Usa GPS, León o introduce coordenadas.</div>
+    <div class="duration-note">Opcional. Positivo retrasa C2/C3; negativo los adelanta. Se aplica también a sus avisos.</div>
     <div class="loc-actions-bottom">
-      <button class="small secondary" id="btn-recalc" aria-label="Recalcular con coordenadas actuales">Actualizar cálculo</button>
+      <button type="button" class="small secondary" id="btn-recalc" aria-label="Recalcular con coordenadas actuales">Actualizar cálculo</button>
     </div>
     </div>
   </section>
@@ -152,7 +175,7 @@
         <div class="phase-name" id="phase-name">-</div>
         <div class="mag-readout">
           <div class="num" id="mag-num">0%</div>
-          <div class="unit">magnitud</div>
+          <div class="unit">avance visual</div>
         </div>
         <div class="sun-geo" id="sun-geo">-</div>
       </div>
@@ -165,8 +188,9 @@
         <div class="clock" id="cd-clock">--:--:--</div>
         <div class="event-name" id="cd-event">-</div>
       </div>
-      <div class="announce-row fullscreen-row" style="justify-content:center; margin-top:1rem;">
-        <button class="small" id="btn-fullscreen">Pantalla completa</button>
+      <div class="alert-readiness" id="alert-readiness" aria-live="polite">Avisos pendientes de activar</div>
+      <div class="announce-row fullscreen-row">
+        <button type="button" class="small" id="btn-fullscreen">Pantalla completa</button>
       </div>
     </div>
 
@@ -189,14 +213,7 @@
           <span>Avisos de fotografía</span>
         </label>
 
-        <div id="photo-events" class="alerts-events">
-          <div class="section-title">Fotografía y seguridad</div>
-          <div class="alerts-mini-row"><span class="alerts-row-time">C2 - 40s</span><span class="alerts-row-title">Mano al filtro</span></div>
-          <div class="alerts-mini-row"><span class="alerts-row-time">C2 - 25..21</span><span class="alerts-row-title">Cuenta atrás para quitar filtro</span></div>
-          <div class="alerts-mini-row"><span class="alerts-row-time">C2 - 20s</span><span class="alerts-row-title">Quita el filtro ahora</span></div>
-          <div class="alerts-mini-row"><span class="alerts-row-time">C3 + 10..14</span><span class="alerts-row-title">Cuenta atrás para poner filtro</span></div>
-          <div class="alerts-mini-row"><span class="alerts-row-time">C3 + 15s</span><span class="alerts-row-title">Pon el filtro ahora</span></div>
-        </div>
+        <div id="photo-events" class="alerts-events"></div>
       </div>
     </div>
   </section>
@@ -207,32 +224,32 @@
       <span class="section-toggle-icon" aria-hidden="true"></span>
     </button>
     <div class="section-body" id="ops-section-body" hidden>
-      <div class="section-title">Voz</div>
+      <div class="section-title">Sonido y voz</div>
       <div class="announce-row">
-        <button id="btn-test-voice">Probar voz</button>
+        <button type="button" id="btn-test-voice">Probar sonido y voz</button>
       </div>
 
       <div id="test-section" class="stack-block stack-block-tight">
         <div class="section-title">Prueba rápida</div>
-        <div class="announce-row" style="align-items:center;">
-          <button id="btn-test-start" class="primary">Iniciar prueba</button>
-          <button id="btn-test-stop" class="small">Salir</button>
+        <div class="announce-row test-actions-row">
+          <button type="button" id="btn-test-start" class="primary">Iniciar prueba</button>
+          <button type="button" id="btn-test-stop" class="small">Salir</button>
         </div>
         <div class="duration-note" id="test-status">Inactivo.</div>
       </div>
     </div>
   </section>
 
-  <div id="alert-banner" style="display:none; position:fixed; inset:0; z-index:999; align-items:center; justify-content:center; text-align:center; padding:2rem; flex-direction:column; gap:.75rem; background:rgba(0,0,0,.95); color:#e9e6dd; border-top:6px solid #e0ac5c;" aria-live="assertive" aria-hidden="true">
-    <div id="alert-banner-tag" style="font-family:'Inter',-apple-system,'Roboto',sans-serif; font-weight:600; font-size:.85rem; letter-spacing:.14em; text-transform:uppercase;"></div>
-    <div id="alert-banner-text" style="font-family:'Inter',-apple-system,'Roboto',sans-serif; font-weight:600; font-size:2.1rem; line-height:1.15;"></div>
-    <button id="alert-banner-dismiss" class="small" style="margin-top:1rem; border-color:currentColor; color:inherit;">Cerrar</button>
+  <div id="alert-banner" aria-live="assertive" aria-hidden="true">
+    <div id="alert-banner-tag"></div>
+    <div id="alert-banner-text"></div>
+    <button type="button" id="alert-banner-dismiss" class="small">Cerrar</button>
   </div>
 
-  <button id="btn-exit-kiosk" style="display:none; position:fixed; top:calc(1rem + env(safe-area-inset-top)); right:1rem; z-index:1000;" aria-label="Salir de pantalla completa">Salir</button>
+  <button type="button" id="btn-exit-kiosk" aria-label="Salir de pantalla completa">Salir</button>
 
   <footer>
-    © 2026 Iker Fernández (@ikerfer_photo). Todos los derechos reservados.<br>
+    © 2026 Iker Fernández · @ikerfer_photo
   </footer>
 </div>
 

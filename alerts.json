@@ -1,0 +1,64 @@
+{
+  "events": {
+    "c1-minus-60": {
+      "tag": "Aviso",
+      "text": "Falta 1 minuto para C1",
+      "voice": "Falta 1 minuto para el inicio de la fase parcial."
+    },
+    "c1-contact": {
+      "tag": "C1",
+      "text": "Comienza la fase parcial",
+      "voice": "Comienza la fase parcial."
+    },
+    "c2-minus-60": {
+      "tag": "Aviso",
+      "text": "Falta 1 minuto para C2",
+      "voice": "Falta 1 minuto para el inicio de la totalidad."
+    },
+    "glasses-off": {
+      "tag": "Inicio de la totalidad",
+      "text": "Inicio de la totalidad",
+      "voice": "Inicio de la totalidad. Puedes quitarte las gafas."
+    },
+    "glasses-on": {
+      "tag": "Fin de la totalidad",
+      "text": "Fin de la totalidad",
+      "voice": "Fin de la totalidad. Ponte las gafas."
+    },
+    "photo-hand": {
+      "tag": "Aviso",
+      "text": "Prepara el filtro",
+      "voice": "Pon la mano en el filtro."
+    },
+    "photo-remove-filter": {
+      "tag": "Aviso",
+      "text": "Quita el filtro",
+      "voice": "Quita el filtro."
+    },
+    "photo-filter-on": {
+      "tag": "Aviso",
+      "text": "Pon el filtro",
+      "voice": "Pon el filtro."
+    },
+    "c4-minus-60": {
+      "tag": "Aviso",
+      "text": "Falta 1 minuto para el fin de la fase parcial",
+      "voice": "Falta 1 minuto para el fin de la fase parcial."
+    },
+    "c4-contact": {
+      "tag": "C4",
+      "text": "Fin del eclipse",
+      "voice": "Fin del eclipse."
+    }
+  },
+  "photoSummary": {
+    "title": "Avisos de fotografía",
+    "rows": {
+      "photo-hand": "Prepara el filtro",
+      "photo-remove-countdown": "Cuenta atrás filtro fuera",
+      "photo-remove-filter": "Quita el filtro",
+      "photo-filter-on-countdown": "Cuenta atrás filtro puesto",
+      "photo-filter-on": "Pon el filtro"
+    }
+  }
+}
