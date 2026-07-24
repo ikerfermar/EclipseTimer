@@ -492,6 +492,15 @@ button.secondary {
   letter-spacing: 0.06em;
 }
 
+.coord-field span.coord-hint {
+  font-weight: 400;
+  font-size: 0.68rem;
+  letter-spacing: normal;
+  line-height: 1.4;
+  color: #8b8779;
+  margin-top: -0.1rem;
+}
+
 .loc-source {
   font-size: 0.8rem;
   padding-top: 0.5rem;

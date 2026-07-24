@@ -241,10 +241,33 @@ function mergeAlertCopyConfig(config) {
   };
 }
 
+const CONFIG_FETCH_TIMEOUT_MS = 1500;
+
+// fetch() no tiene timeout propio: con red lenta o intermitente (típico en
+// un sitio de observación remoto) podía tardar mucho en fallar. Como antes
+// se esperaba a esto antes de bindEvents(), los botones se quedaban sin
+// responder mientras tanto. Con la carrera contra el timeout, como mucho
+// tarda CONFIG_FETCH_TIMEOUT_MS y sigue con los valores por defecto.
+function fetchWithTimeout(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error("config fetch timeout")), timeoutMs);
+    fetch(url, { cache: "no-cache" }).then(
+      (response) => {
+        clearTimeout(timeoutId);
+        resolve(response);
+      },
+      (err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      }
+    );
+  });
+}
+
 async function loadAlertCopyConfig() {
   if (typeof fetch !== "function") return;
   try {
-    const response = await fetch("alerts.json", { cache: "no-cache" });
+    const response = await fetchWithTimeout("alerts.json", CONFIG_FETCH_TIMEOUT_MS);
     if (!response.ok) return;
     alertCopy = mergeAlertCopyConfig(await response.json());
   } catch (_) {
@@ -265,7 +288,7 @@ function mergePaypalConfig(config) {
 async function loadPaypalConfig() {
   if (typeof fetch !== "function") return;
   try {
-    const response = await fetch("paypal.json", { cache: "no-cache" });
+    const response = await fetchWithTimeout("paypal.json", CONFIG_FETCH_TIMEOUT_MS);
     if (!response.ok) return;
     paypalConfig = mergePaypalConfig(await response.json());
   } catch (_) {
@@ -768,10 +791,12 @@ function applyGeolocationPosition(pos, sourcePrefix) {
 function handleLocateError(err) {
   const iosHint = "Ubicación bloqueada. Actívala en Ajustes > Privacidad y seguridad > Localización para este navegador, y recarga.";
 
-  if (isLikelyIOS()) {
+  if (isLikelyIOS() && err && err.code === 1) {
     setLocStatus(iosHint, "err");
   } else if (err && err.code === 1) {
     setLocStatus("Bloqueada por el navegador. Usa coordenadas manuales o 'León'.", "err");
+  } else if (err && err.code === 3) {
+    setLocStatus("GPS tardó demasiado. Prueba de nuevo o usa coordenadas manuales.", "err");
   } else {
     setLocStatus("No se pudo obtener la ubicación. Introduce coordenadas a mano.", "err");
   }
@@ -1173,12 +1198,22 @@ function speak(text, options = {}) {
 // directamente: solo soporta notificaciones vía ServiceWorkerRegistration.
 // showNotification(). Desktop y Safari sí soportan el constructor directo,
 // así que lo dejamos como último recurso si no hay service worker listo.
-function notify(title, body) {
+// El beep() y la voz dependen de que la pestaña siga ejecutando JS: en
+// segundo plano, Chrome/Android puede llegar a congelarla del todo. La
+// notificación del sistema, en cambio, sigue sonando y vibrando aunque la
+// pestaña esté congelada, porque una vez pedida al service worker la
+// gestiona el propio sistema operativo. Por eso aquí se apoya el aviso
+// sonoro/háptico en el propio sonido y patrón de vibración de la
+// notificación (silent:false, vibrate) en vez de depender de beep()/speak().
+function notify(title, body, vibrate) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+  const options = { body, silent: false };
+  if (Array.isArray(vibrate) && vibrate.length) options.vibrate = vibrate;
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.ready
-      .then((reg) => reg.showNotification(title, { body }))
+      .then((reg) => reg.showNotification(title, options))
       .catch(() => {
         // Sin service worker activo todavía: no hay nada más que intentar
         // en plataformas que exigen la ruta del SW (p. ej. Android).
@@ -1187,7 +1222,7 @@ function notify(title, body) {
   }
 
   try {
-    new Notification(title, { body });
+    new Notification(title, options);
   } catch (_) {
     // ignore notification failures
   }
@@ -1536,7 +1571,7 @@ function buildTimedEvents(c) {
 function triggerTimedEvent(event) {
   if (event.beepFreq && event.beepTimes) beep(event.beepFreq, event.beepTimes);
   if (event.vibrate && navigator.vibrate) navigator.vibrate(event.vibrate);
-  notify(`Eclipse · ${event.tag}`, event.text);
+  notify(`Eclipse · ${event.tag}`, event.text, event.vibrate);
 
   if (event.voice) {
     speak(event.voice, { interrupt: !!event.forceVoice, rate: event.rate });
@@ -2231,10 +2266,7 @@ function configureSupportButton() {
   btn.textContent = paypalConfig.label || DEFAULT_PAYPAL_CONFIG.label;
 }
 
-window.addEventListener("load", async () => {
-  await loadAlertCopyConfig();
-  await loadPaypalConfig();
-
+window.addEventListener("load", () => {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./service-worker.js").then((reg) => {
       reg.update().catch(() => {});
@@ -2263,4 +2295,11 @@ window.addEventListener("load", async () => {
   hideBanner();
   restoreLastLocation();
   configureSupportButton();
+
+  // alerts.json y paypal.json son configuración opcional (textos de avisos,
+  // botón de donación). Se cargan en paralelo y en segundo plano: la app ya
+  // es interactiva con los valores por defecto, y si (cuando) llegan estos
+  // ficheros, simplemente se refresca el texto correspondiente.
+  loadAlertCopyConfig().then(() => renderAlertSummaries());
+  loadPaypalConfig().then(() => configureSupportButton());
 });
