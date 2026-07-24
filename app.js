@@ -16,7 +16,27 @@ const TAN_F1 = 0.0046141;
 const TAN_F2 = 0.0045911;
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
-const UI_TICK_MS = 100;
+// Antes se recalculaba todo a 10 Hz (100 ms) sin parar, incluso con horas
+// de margen hasta el próximo contacto. Solo hace falta esa resolución justo
+// antes de un evento, para sincronizar bien los beeps y la cuenta atrás.
+// El resto del tiempo, 1 Hz es de sobra para un reloj y ahorra CPU/batería.
+// Nota: como los avisos de buildTimedEvents() están agrupados cada 20-40 s
+// alrededor de C2/C3, en la práctica el modo "fast" se mantiene activo casi
+// todo ese tramo (no solo los últimos AUDIO_FAST_WINDOW_SEC segundos),
+// porque siempre hay un aviso cercano tirando del intervalo hacia abajo.
+const FAST_TICK_MS = 100;
+const MEDIUM_TICK_MS = 300;
+const SLOW_TICK_MS = 1000;
+const AUDIO_FAST_WINDOW_SEC = 20;
+const AUDIO_MEDIUM_WINDOW_SEC = 120;
+// Margen para reanudar el AudioContext con antelación. Debe ser
+// sensiblemente mayor que AUDIO_FAST_WINDOW_SEC: si coincidiera con la
+// misma ventana, la reanudación (asíncrona) y el primer beep se pedirían
+// casi en el mismo tick, sin margen real de reloj para que resume()
+// termine antes de que haga falta sonido. 40 s da varios ciclos de tick
+// "medium" (300 ms) de margen real antes de necesitar sonido, sin tener el
+// audio despierto tanto tiempo como con el margen anterior (120 s).
+const AUDIO_SUSPEND_MARGIN_SEC = 40;
 const PREFS_KEY = "eclipsetimer-alert-prefs-v1";
 const AUDIO_ADVANCE_SEC = 0.5;
 const AUDIO_ADVANCE_HOURS = AUDIO_ADVANCE_SEC / 3600;
@@ -42,10 +62,25 @@ let state = {
 
 let wakeLockRef = null;
 let bannerTimeout = null;
-let rafId = null;
-let lastUiTick = 0;
+let tickTimerId = null;
+let tickIntervalMs = SLOW_TICK_MS;
 let sharedAudioCtx = null;
 let diskNodes = null;
+let tickNodes = null;
+
+function getTickNodes() {
+  if (!tickNodes) {
+    tickNodes = {
+      phaseName: $("phase-name"),
+      magNum: $("mag-num"),
+      sunGeo: $("sun-geo"),
+      cdClock: $("cd-clock"),
+      cdEvent: $("cd-event"),
+      cdLabel: $("cd-label")
+    };
+  }
+  return tickNodes;
+}
 let alertDisplayQueue = [];
 let alertDisplayActive = false;
 let countdownFlashTimer = null;
@@ -84,12 +119,52 @@ function loadAlertPrefs() {
 
 function saveAlertPrefs() {
   try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    const existing = raw ? JSON.parse(raw) : {};
     localStorage.setItem(PREFS_KEY, JSON.stringify({
+      ...existing,
       photoEnabled: state.photoEnabled
     }));
   } catch (_) {
     // ignore storage failures
   }
+}
+
+// Guarda la última ubicación válida para no depender de volver a pedirla
+// (GPS) o teclearla a mano el día del eclipse.
+function saveLastLocation(lat, lon, alt, sourceLabel) {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    const existing = raw ? JSON.parse(raw) : {};
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      ...existing,
+      lastLat: lat,
+      lastLon: lon,
+      lastAlt: alt,
+      lastSourceLabel: sourceLabel || "manual"
+    }));
+  } catch (_) {
+    // ignore storage failures
+  }
+}
+
+function loadLastLocation() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.lastLat === "number" && typeof parsed.lastLon === "number") {
+      return {
+        lat: parsed.lastLat,
+        lon: parsed.lastLon,
+        alt: typeof parsed.lastAlt === "number" ? parsed.lastAlt : 0,
+        sourceLabel: parsed.lastSourceLabel || "manual"
+      };
+    }
+  } catch (_) {
+    // ignore malformed local storage
+  }
+  return null;
 }
 
 function syncAlertControlsFromState() {
@@ -108,6 +183,9 @@ function bindAlertControls() {
       hideBanner();
       clearSpeechQueue();
     }
+    // Photo events depend on photoEnabled, so the cached event list must be
+    // rebuilt to reflect the new setting (done lazily on the next tick).
+    if (state.contacts) state.contacts.events = null;
     syncAlertControlsFromState();
     saveAlertPrefs();
   });
@@ -235,14 +313,32 @@ function tToDate(tTDT) {
   return new Date(baseUTC + utHours * 3600 * 1000);
 }
 
-function fmtMadrid(date) {
+// Antes se forzaba "Europe/Madrid" (fmtMadrid), pero la totalidad del 12 de
+// agosto de 2026 también cruza Groenlandia e Islandia: alguien viendo el
+// eclipse desde allí vería su hora local mal etiquetada como CEST. Usamos la
+// zona horaria real del dispositivo (la que ya usa Intl por defecto).
+function fmtLocal(date) {
   return new Intl.DateTimeFormat("es-ES", {
-    timeZone: "Europe/Madrid",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false
   }).format(date);
+}
+
+function localTZLabel() {
+  try {
+    const parts = new Intl.DateTimeFormat("es-ES", { timeZoneName: "short" }).formatToParts(new Date());
+    const tz = parts.find((p) => p.type === "timeZoneName");
+    if (tz && tz.value) return tz.value;
+  } catch (_) {
+    // fall through
+  }
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "hora local";
+  } catch (_) {
+    return "hora local";
+  }
 }
 
 function resetAlerts() {
@@ -339,12 +435,14 @@ function revealResultSections() {
   });
 }
 
-function applyPostLocationLayout() {
+function applyPostLocationLayout(skipScroll) {
   revealResultSections();
   setSectionOpen("loc-section", false);
   COLLAPSIBLE_POST_LOCATION_IDS.forEach((sectionId) => {
     setSectionOpen(sectionId, false);
   });
+
+  if (skipScroll) return;
 
   const main = $("main-section");
   if (main && !main.hidden) {
@@ -420,7 +518,26 @@ function locateUser() {
   );
 }
 
-function recalc() {
+function restoreLastLocation() {
+  const saved = loadLastLocation();
+  if (!saved) return;
+
+  writeLat(saved.lat);
+  writeLon(saved.lon);
+  $("in-alt").value = Math.round(saved.alt);
+  $("loc-source").textContent = saved.sourceLabel;
+  setLocStatus("Última ubicación guardada recuperada. Recalculando...", "ok");
+  // No pedimos permisos de audio/notificaciones aquí: no es un gesto de
+  // usuario real, así que en iOS no serviría de nada intentarlo en
+  // silencio. En su lugar, si de verdad hace falta un gesto, mostramos un
+  // botón para que el usuario lo dé explícitamente.
+  recalc({ skipScroll: true });
+  if (audioChannelsNeedRealGesture()) {
+    showAudioArmBanner();
+  }
+}
+
+function recalc(options = {}) {
   cancelLocateRequest("Usando coordenadas actuales.", "ok");
 
   const lat = readLat();
@@ -436,6 +553,7 @@ function recalc() {
   state.lon = lon;
   state.alt = alt;
   state.contacts = computeContacts(lat, lon, alt);
+  state.contacts.events = buildTimedEvents(state.contacts);
   state.testMode = false;
   state.testStartWallMs = null;
   state.testStartVirtualT = null;
@@ -446,17 +564,32 @@ function recalc() {
     $("loc-source").textContent = "manual";
   }
 
+  saveLastLocation(lat, lon, alt, $("loc-source").textContent);
   renderContacts();
-  applyPostLocationLayout();
+  applyPostLocationLayout(!!options.skipScroll);
 
   acquireWakeLock();
   startLoop();
-  tick();
+  safeTick();
+}
+
+// Heurística simple: si el Sol está bajo el horizonte tanto al principio
+// como al final del evento, lo más probable es que todo el eclipse ocurra
+// de noche en estas coordenadas (no cubre el caso de que salga o se ponga
+// a mitad del evento, pero para eso ya se muestra alt/az en cada contacto).
+function eclipseMostlyBelowHorizon(c) {
+  if (c.c1 === null || c.c4 === null) return false;
+  const altStart = sunAltAz(c.c1, state.lat, state.lon).alt;
+  const altEnd = sunAltAz(c.c4, state.lat, state.lon).alt;
+  return altStart <= -1 && altEnd <= -1;
 }
 
 function renderContacts() {
   const c = state.contacts;
   if (!c) return;
+
+  const contactsTitle = document.querySelector("#contacts-section .section-title");
+  if (contactsTitle) contactsTitle.textContent = `Contactos (${localTZLabel()})`;
 
   const list = $("contacts-list");
   list.innerHTML = "";
@@ -472,7 +605,7 @@ function renderContacts() {
     const div = document.createElement("div");
     div.className = `contact${r.t === null ? " na" : ""}`;
     div.id = `row-${r.tag}`;
-    div.innerHTML = `<div class="tag">${r.tag}</div><div class="desc">${r.desc}</div><div class="time">${r.t !== null ? fmtMadrid(tToDate(r.t)) : "No visible"}</div>`;
+    div.innerHTML = `<div class="tag">${r.tag}</div><div class="desc">${r.desc}</div><div class="time">${r.t !== null ? fmtLocal(tToDate(r.t)) : "No visible"}</div>`;
     list.appendChild(div);
 
     if (r.t !== null) {
@@ -486,15 +619,25 @@ function renderContacts() {
   });
 
   const note = $("duration-note");
-  if (c.total) {
-    const durSec = (c.c3 - c.c2) * 3600;
-    const mm = Math.floor(durSec / 60);
-    const ss = Math.round(durSec % 60);
-    note.textContent = `Totalidad: ${mm} min ${ss} s.`;
-  } else if (c.c1 !== null) {
-    note.textContent = "Fuera de la franja de totalidad: solo parcial.";
+  if (c.c1 === null) {
+    note.textContent = "No visible desde estas coordenadas: quedan fuera de la franja de penumbra del eclipse (ni siquiera se ve como fase parcial).";
   } else {
-    note.textContent = "No visible desde estas coordenadas.";
+    const totalDurSec = (c.c4 - c.c1) * 3600;
+    const totalMin = Math.floor(totalDurSec / 60);
+    const totalS = Math.round(totalDurSec % 60);
+    let msg;
+    if (c.total) {
+      const durSec = (c.c3 - c.c2) * 3600;
+      const mm = Math.floor(durSec / 60);
+      const ss = Math.round(durSec % 60);
+      msg = `Totalidad: ${mm} min ${ss} s · Eclipse completo (parcial + total): ${totalMin} min ${totalS} s.`;
+    } else {
+      msg = `Fuera de la franja de totalidad: solo parcial · Duración: ${totalMin} min ${totalS} s.`;
+    }
+    if (eclipseMostlyBelowHorizon(c)) {
+      msg += " Aviso: el Sol está bajo el horizonte durante todo el evento en estas coordenadas, así que no podrás verlo aunque el cálculo sea correcto.";
+    }
+    note.textContent = msg;
   }
 }
 
@@ -522,6 +665,31 @@ function getSharedAudioContext() {
     });
   }
   return sharedAudioCtx;
+}
+
+// iOS/Safari solo permite crear o reanudar un AudioContext dentro de un gesto
+// de usuario real (click/tap). Esta función debe llamarse de forma síncrona
+// al principio de cualquier manejador de click que pueda derivar en alertas
+// sonoras, para "desbloquear" el audio antes de que haga falta en tick().
+function unlockAudioContext() {
+  try {
+    const ctx = getSharedAudioContext();
+    // Reproduce un buffer silencioso de 1 frame: en iOS esto es lo que de
+    // verdad marca el contexto como "desbloqueado" para reproducciones
+    // posteriores que no ocurran dentro de un gesto de usuario.
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    if (source.start) {
+      source.start(0);
+    } else if (source.noteOn) {
+      source.noteOn(0);
+    }
+  } catch (_) {
+    // Si el navegador no soporta AudioContext, los beeps ya fallarán en
+    // silencio dentro de beep(); aquí no hay nada más que hacer.
+  }
 }
 
 function beep(freq, times = 1) {
@@ -574,6 +742,53 @@ function notify(title, body) {
   }
 }
 
+// El permiso de notificaciones también debe pedirse dentro de un gesto de
+// usuario. Se llama junto a unlockAudioContext() en los mismos botones.
+function requestNotificationPermission() {
+  if ("Notification" in window && Notification.permission === "default") {
+    try {
+      Notification.requestPermission().catch(() => {
+        // ignore rejection; notify() seguirá comprobando el permiso
+      });
+    } catch (_) {
+      // Safari antiguo usa la API basada en callback en vez de promesa
+      try {
+        Notification.requestPermission(() => {});
+      } catch (_) {
+        // ignore
+      }
+    }
+  }
+}
+
+// Punto único a llamar desde cualquier click real de usuario que pueda
+// desembocar en alertas (voz/beep/vibración/notificación) más adelante.
+function armAlertChannels() {
+  unlockAudioContext();
+  requestNotificationPermission();
+  hideAudioArmBanner();
+}
+
+// Comprueba si el audio y/o las notificaciones todavía no han pasado por un
+// gesto de usuario real. Solo hace falta mostrar el aviso cuando algo de
+// esto sigue pendiente; si ya se armó en una sesión anterior (o el usuario
+// ya tocó algún botón), no hace falta molestar.
+function audioChannelsNeedRealGesture() {
+  const audioNeedsGesture = !sharedAudioCtx || sharedAudioCtx.state !== "running";
+  const notifNeedsGesture = "Notification" in window && Notification.permission === "default";
+  return audioNeedsGesture || notifNeedsGesture;
+}
+
+function showAudioArmBanner() {
+  const banner = $("audio-arm-banner");
+  if (banner) banner.hidden = false;
+}
+
+function hideAudioArmBanner() {
+  const banner = $("audio-arm-banner");
+  if (banner) banner.hidden = true;
+}
+
 function hideBanner() {
   const banner = $("alert-banner");
   banner.classList.remove("show");
@@ -593,7 +808,8 @@ function showCountdownFlash(num, color) {
     flash.style.minWidth = "72px";
     flash.style.padding = "0.5rem 0.8rem";
     flash.style.textAlign = "center";
-    flash.style.fontFamily = "Consolas, 'Courier New', monospace";
+    flash.style.fontFamily = "Inter, -apple-system, Roboto, sans-serif";
+    flash.style.fontVariantNumeric = "tabular-nums";
     flash.style.fontSize = "2.1rem";
     flash.style.fontWeight = "700";
     flash.style.border = "2px solid #e0ac5c";
@@ -802,8 +1018,8 @@ function checkSynchronizedCountdowns(t, c) {
 }
 
 function checkAlerts(t, prevT, c) {
-  const events = buildTimedEvents(c);
-  events.forEach((event) => {
+  // tick() ya garantiza c.events antes de llamar aquí.
+  c.events.forEach((event) => {
     const triggerAt = event.time - AUDIO_ADVANCE_HOURS;
     const crossed = prevT === null ? t >= triggerAt : (prevT < triggerAt && t >= triggerAt);
     if (!state.alertsFired[event.key] && crossed) {
@@ -818,10 +1034,13 @@ function checkAlerts(t, prevT, c) {
 
 function checkVoiceAnnouncements(t, prevT, c) {
   const voiceEvents = [
-    { key: "c1", label: "C1", text: "Contacto uno. Comienza la fase parcial." },
-    { key: "c2", label: "C2", text: "Contacto dos. Comienza la totalidad, puedes quitar las gafas." },
-    { key: "c3", label: "C3", text: "Contacto tres. Termina la totalidad, vuelve a poner las gafas." },
-    { key: "c4", label: "C4", text: "Contacto cuatro. Termina el eclipse." }
+    { key: "c1", label: "C1", text: "Contacto uno. Comienza la fase parcial.", skipNotify: false },
+    // C2 y C3 ya generan notificación propia en checkAlerts (eventos
+    // "glasses-off"/"glasses-on"), así que aquí solo hace falta la voz;
+    // notificar también aquí duplicaba el aviso en el sistema del móvil.
+    { key: "c2", label: "C2", text: "Contacto dos. Comienza la totalidad, puedes quitar las gafas.", skipNotify: true },
+    { key: "c3", label: "C3", text: "Contacto tres. Termina la totalidad, vuelve a poner las gafas.", skipNotify: true },
+    { key: "c4", label: "C4", text: "Contacto cuatro. Termina el eclipse.", skipNotify: false }
   ];
 
   voiceEvents.forEach((ev) => {
@@ -829,12 +1048,18 @@ function checkVoiceAnnouncements(t, prevT, c) {
     if (et === null || state.voiceFired[ev.key]) return;
 
     const triggerAt = et - AUDIO_ADVANCE_HOURS;
-    const crossed = prevT === null ? false : (prevT < triggerAt && t >= triggerAt);
-    if (crossed) {
-      state.voiceFired[ev.key] = true;
-      speak(ev.text, { interrupt: true, rate: 1.05 });
-      notify(`Eclipse · ${ev.label}`, ev.text);
-    }
+    const crossed = prevT === null ? t >= triggerAt : (prevT < triggerAt && t >= triggerAt);
+    if (!crossed) return;
+
+    state.voiceFired[ev.key] = true;
+    // Igual que en checkAlerts: si llegamos muy tarde (pestaña en segundo
+    // plano, pantalla bloqueada...) no anunciamos en voz alta una
+    // instrucción de seguridad que ya no corresponde al momento actual.
+    const lateSec = (t - triggerAt) * 3600;
+    if (lateSec > ALERT_MAX_LATE_SEC) return;
+
+    speak(ev.text, { interrupt: true, rate: 1.05 });
+    if (!ev.skipNotify) notify(`Eclipse · ${ev.label}`, ev.text);
   });
 }
 
@@ -917,12 +1142,13 @@ function drawDisk(fraction, insideTotality) {
 }
 
 function updateCountdown(t, c) {
-  const events = [
+  const nodes = getTickNodes();
+  const events = (c.countdownEvents || (c.countdownEvents = [
     { name: "C1 · Inicio parcial", t: c.c1 },
     { name: "C2 · Inicio totalidad", t: c.c2 },
     { name: "C3 · Fin totalidad", t: c.c3 },
     { name: "C4 · Fin eclipse", t: c.c4 }
-  ].filter((e) => e.t !== null);
+  ].filter((e) => e.t !== null)));
 
   const next = events.find((e) => e.t > t);
   if (next) {
@@ -932,16 +1158,16 @@ function updateCountdown(t, c) {
     const hh = Math.floor(diffSec / 3600);
     const mm = Math.floor((diffSec % 3600) / 60);
     const ss = diffSec % 60;
-    $("cd-clock").textContent = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-    $("cd-event").textContent = next.name;
-    $("cd-label").textContent = "faltan para";
+    setText(nodes.cdClock, `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`);
+    setText(nodes.cdEvent, next.name);
+    setText(nodes.cdLabel, "faltan para");
   } else if (events.length) {
-    $("cd-clock").textContent = "00:00:00";
-    $("cd-event").textContent = "Eclipse finalizado";
-    $("cd-label").textContent = "—";
+    setText(nodes.cdClock, "00:00:00");
+    setText(nodes.cdEvent, "Eclipse finalizado");
+    setText(nodes.cdLabel, "—");
   } else {
-    $("cd-clock").textContent = "—:—:—";
-    $("cd-event").textContent = "No visible desde aquí";
+    nodes.cdClock.textContent = "—:—:—";
+    nodes.cdEvent.textContent = "No visible: fuera de la franja del eclipse";
   }
 }
 
@@ -968,6 +1194,56 @@ function updateActiveRows(t, c) {
   }
 }
 
+// Evita reescribir el DOM cuando el valor no ha cambiado (a 1-10 Hz, escribir
+// siempre textContent fuerza trabajo de layout/estilo innecesario).
+function setText(el, value) {
+  if (el && el.textContent !== value) el.textContent = value;
+}
+
+// Segundos hasta el próximo contacto o aviso programado (o null si no queda
+// ninguno). Se usa para decidir la frecuencia de refresco y para saber
+// cuándo despertar/dormir el AudioContext.
+function secondsToNextEvent(t, c) {
+  let best = null;
+  const consider = (time) => {
+    if (time === null || time === undefined) return;
+    const diffSec = (time - t) * 3600;
+    if (diffSec >= -2 && (best === null || diffSec < best)) best = diffSec;
+  };
+  consider(c.c1);
+  consider(c.c2);
+  consider(c.c3);
+  consider(c.c4);
+  if (c.events) {
+    c.events.forEach((e) => {
+      if (!state.alertsFired[e.key]) consider(e.time);
+    });
+  }
+  return best;
+}
+
+function desiredTickIntervalMs(secToNext) {
+  if (secToNext === null) return SLOW_TICK_MS;
+  if (secToNext <= AUDIO_FAST_WINDOW_SEC) return FAST_TICK_MS;
+  if (secToNext <= AUDIO_MEDIUM_WINDOW_SEC) return MEDIUM_TICK_MS;
+  return SLOW_TICK_MS;
+}
+
+// Mantener el AudioContext "running" indefinidamente gasta batería aunque no
+// suene nada. Lo suspendemos cuando no hay ningún evento cerca y lo
+// reanudamos justo antes de que haga falta un beep.
+function manageAudioContextPower(secToNext) {
+  if (!sharedAudioCtx) return;
+  const needsToBeAwake = secToNext !== null && secToNext <= AUDIO_SUSPEND_MARGIN_SEC;
+  if (needsToBeAwake) {
+    if (sharedAudioCtx.state === "suspended") {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+  } else if (sharedAudioCtx.state === "running") {
+    sharedAudioCtx.suspend().catch(() => {});
+  }
+}
+
 function tick() {
   const c = state.contacts;
   if (!c) return;
@@ -975,6 +1251,12 @@ function tick() {
   const t = currentTUTC();
   const prevT = state.prevTickTUTC;
   const circ = circumstances(t, c.obs);
+
+  if (!c.events) c.events = buildTimedEvents(c);
+  const secToNext = secondsToNextEvent(t, c);
+  tickIntervalMs = desiredTickIntervalMs(secToNext);
+  manageAudioContextPower(secToNext);
+
   checkAlerts(t, prevT, c);
   checkSynchronizedCountdowns(t, c);
   checkVoiceAnnouncements(t, prevT, c);
@@ -1001,18 +1283,19 @@ function tick() {
     }
   }
 
-  $("phase-name").textContent = phaseText;
+  const nodes = getTickNodes();
+  setText(nodes.phaseName, phaseText);
   drawDisk(fraction, insideTotality);
 
   let magPct = 0;
   if (c.c1 !== null && t >= c.c1 && t <= c.c4) {
     magPct = insideTotality ? 100 : Math.round(fraction * 100);
   }
-  $("mag-num").textContent = `${magPct}%`;
+  setText(nodes.magNum, `${magPct}%`);
 
   if (c.c1 !== null) {
     const geo = sunAltAz(t, state.lat, state.lon);
-    $("sun-geo").textContent = geo.alt > -1 ? `${geo.alt.toFixed(0)}° alt · ${geo.az.toFixed(0)}° az` : "Sol bajo el horizonte";
+    setText(nodes.sunGeo, geo.alt > -1 ? `${geo.alt.toFixed(0)}° alt · ${geo.az.toFixed(0)}° az` : "Sol bajo el horizonte");
   }
 
   updateCountdown(t, c);
@@ -1020,16 +1303,27 @@ function tick() {
   state.prevTickTUTC = t;
 }
 
+function safeTick() {
+  try {
+    tick();
+  } catch (err) {
+    // Un fallo puntual (p. ej. un DOM node inesperado) no debe congelar el
+    // reloj para siempre: lo registramos y dejamos que el bucle siga.
+    console.error("EclipseTimer: error en tick()", err);
+  }
+}
+
+function scheduleTick() {
+  tickTimerId = window.setTimeout(() => {
+    tickTimerId = null;
+    safeTick();
+    if (state.contacts) scheduleTick();
+  }, tickIntervalMs);
+}
+
 function startLoop() {
-  if (rafId) return;
-  const loop = (ts) => {
-    if (state.contacts && (!lastUiTick || ts - lastUiTick >= UI_TICK_MS)) {
-      lastUiTick = ts;
-      tick();
-    }
-    rafId = window.requestAnimationFrame(loop);
-  };
-  rafId = window.requestAnimationFrame(loop);
+  if (tickTimerId) return;
+  scheduleTick();
 }
 
 function enterKiosk() {
@@ -1060,9 +1354,16 @@ function bindEvents() {
     });
   });
 
-  $("btn-locate").addEventListener("click", locateUser);
-  $("btn-recalc").addEventListener("click", recalc);
+  $("btn-locate").addEventListener("click", () => {
+    armAlertChannels();
+    locateUser();
+  });
+  $("btn-recalc").addEventListener("click", () => {
+    armAlertChannels();
+    recalc();
+  });
   $("btn-leon").addEventListener("click", () => {
+    armAlertChannels();
     cancelLocateRequest("Búsqueda interrumpida. Se usarán coordenadas de León.", "ok");
     writeLat(42.5987);
     writeLon(-5.5671);
@@ -1072,8 +1373,19 @@ function bindEvents() {
     recalc();
   });
 
-  $("btn-fullscreen").addEventListener("click", enterKiosk);
+  $("btn-fullscreen").addEventListener("click", () => {
+    armAlertChannels();
+    enterKiosk();
+  });
   $("btn-exit-kiosk").addEventListener("click", exitKiosk);
+
+  const btnArmAudio = $("btn-arm-audio");
+  if (btnArmAudio) {
+    btnArmAudio.addEventListener("click", () => {
+      armAlertChannels();
+      speak("Sonido y avisos activados.", { interrupt: true });
+    });
+  }
 
   document.addEventListener("fullscreenchange", () => {
     if (!document.fullscreenElement) {
@@ -1101,6 +1413,7 @@ function bindEvents() {
   });
 
   $("btn-test-voice").addEventListener("click", () => {
+    armAlertChannels();
     if (!("speechSynthesis" in window)) {
       alert("Este navegador no soporta síntesis de voz.");
       return;
@@ -1109,6 +1422,7 @@ function bindEvents() {
   });
 
   $("btn-test-start").addEventListener("click", () => {
+    armAlertChannels();
     const c = state.contacts;
     if (!c || c.c2 === null || c.c3 === null) {
       $("test-status").textContent = "Necesita totalidad. Prueba con León: 42.5987 N / 5.5671 O / 838 m.";
@@ -1138,6 +1452,44 @@ function bindEvents() {
   });
 }
 
+// Instalación guiada: Chrome/Android (y similares) disparan este evento en
+// vez de dejar que el navegador muestre su propio banner genérico. Lo
+// interceptamos para ofrecer un botón "Instalar app" bajo nuestro control.
+// iOS Safari no dispara este evento (no soporta beforeinstallprompt), así
+// que el botón simplemente no aparece ahí; conviven bien.
+let deferredInstallPrompt = null;
+
+function bindInstallPrompt() {
+  const btn = $("btn-install");
+  if (!btn) return;
+
+  window.addEventListener("beforeinstallprompt", (ev) => {
+    ev.preventDefault();
+    deferredInstallPrompt = ev;
+    btn.style.display = "inline-block";
+  });
+
+  btn.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    btn.disabled = true;
+    try {
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+    } catch (_) {
+      // ignore
+    } finally {
+      deferredInstallPrompt = null;
+      btn.style.display = "none";
+      btn.disabled = false;
+    }
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    btn.style.display = "none";
+  });
+}
+
 window.addEventListener("load", () => {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./service-worker.js").catch(() => {
@@ -1148,7 +1500,9 @@ window.addEventListener("load", () => {
   loadAlertPrefs();
   bindEvents();
   bindAlertControls();
+  bindInstallPrompt();
   syncAlertControlsFromState();
   updateLocateButton();
   hideBanner();
+  restoreLastLocation();
 });
