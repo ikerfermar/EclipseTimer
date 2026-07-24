@@ -95,6 +95,7 @@ header {
   min-height: 2.35rem;
   padding: 0;
   margin-left: auto;
+  align-self: center;
   font-size: 0.88rem;
   color: #c8c3b5;
   border: 1px solid var(--line);
@@ -107,8 +108,9 @@ header {
 
 .about-toggle span {
   color: var(--corona);
-  font-size: 1rem;
-  line-height: 1;
+  font-size: 0.96rem;
+  line-height: 0;
+  transform: translateY(-0.01rem);
 }
 
 .about-panel {
@@ -960,15 +962,27 @@ body.kiosk.kiosk-ultra-height .duration-note {
 }
 
 .alert-readiness {
-  margin-top: 0.35rem;
-  color: #8b8779;
-  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.5rem auto 0;
+  padding: 0.32rem 0.62rem;
+  border: 1px solid rgba(224, 172, 92, 0.24);
+  border-radius: 4px;
+  background: rgba(224, 172, 92, 0.08);
+  color: #c8c3b5;
+  font-size: 0.7rem;
   font-weight: 600;
   text-align: center;
+  line-height: 1.25;
 }
 
 .alert-readiness.ok {
   color: var(--ok);
+  border-color: rgba(95, 122, 94, 0.42);
+  background: rgba(95, 122, 94, 0.13);
 }
 
 .alert-readiness.warn {

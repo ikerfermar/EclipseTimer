@@ -1199,7 +1199,7 @@ function notificationPermissionLabel() {
 
 function alertReadinessLabel() {
   const audioReady = !alertAudioNeedsGesture();
-  const notificationsGranted = "Notification" in window && Notification.permission === "granted";
+  const notificationsGranted = !!window.Notification && window.Notification.permission === "granted";
   if (audioReady && notificationsGranted) return "Avisos preparados · sonido y notificaciones";
   if (audioReady) return "Avisos preparados · sonido";
   return "Avisos pendientes · toca Activar avisos";
@@ -1878,12 +1878,14 @@ function restartLoop() {
 function enterKiosk() {
   queueViewportMetricsUpdate();
   document.body.classList.add("kiosk");
+  $("btn-exit-kiosk").hidden = false;
   const el = document.documentElement;
   if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
 }
 
 function exitKiosk() {
   document.body.classList.remove("kiosk");
+  $("btn-exit-kiosk").hidden = true;
   if (document.fullscreenElement && document.exitFullscreen) {
     document.exitFullscreen().catch(() => {});
   }
@@ -1994,6 +1996,7 @@ function bindEvents() {
   document.addEventListener("fullscreenchange", () => {
     if (!document.fullscreenElement) {
       document.body.classList.remove("kiosk");
+      $("btn-exit-kiosk").hidden = true;
     }
   });
 
@@ -2075,7 +2078,9 @@ function isStandaloneDisplay() {
   return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 }
 
-function showIOSInstallHelp() {
+function showInstallHelp(message) {
+  const text = $("install-help-text");
+  if (text && message) text.textContent = message;
   const help = $("ios-install-help");
   if (help) help.hidden = false;
 }
@@ -2093,6 +2098,7 @@ function bindInstallPrompt() {
   if (isStandaloneDisplay()) return;
 
   const isIOS = isLikelySafariIOS();
+  btn.hidden = false;
 
   window.addEventListener("beforeinstallprompt", (ev) => {
     ev.preventDefault();
@@ -2103,10 +2109,6 @@ function bindInstallPrompt() {
   // iOS Safari nunca dispara beforeinstallprompt (no lo soporta), así que
   // ahí mostramos el botón igualmente: al tocarlo no hay prompt de sistema,
   // solo instrucciones manuales (Compartir > Añadir a pantalla de inicio).
-  if (isIOS) {
-    btn.hidden = false;
-  }
-
   btn.addEventListener("click", async () => {
     if (deferredInstallPrompt) {
       btn.disabled = true;
@@ -2124,8 +2126,11 @@ function bindInstallPrompt() {
     }
 
     if (isIOS) {
-      showIOSInstallHelp();
+      showInstallHelp("Toca compartir (el icono de Safari) y luego «Añadir a pantalla de inicio».");
+      return;
     }
+
+    showInstallHelp("Si el aviso de instalación no aparece, usa el menú del navegador y elige «Instalar app» o «Añadir a pantalla de inicio».");
   });
 
   const closeHelpBtn = $("btn-ios-install-close");

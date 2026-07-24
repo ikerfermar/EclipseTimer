@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_VERSION = "eclipsetimer-v45";
+const CACHE_VERSION = "eclipsetimer-v47";
 const UPDATE_TIMEOUT_MS = 1500;
 
 // iOS splash screens are requested only by Safari/iPadOS. They are cached on
