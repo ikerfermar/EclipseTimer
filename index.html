@@ -121,7 +121,6 @@
     <span>Activa el sonido para los avisos. Las notificaciones son opcionales.</span>
     <button type="button" id="btn-arm-audio" class="small primary">Activar avisos</button>
     <span id="alert-channel-status" class="alert-channel-status"></span>
-    <span class="volume-reminder">Comprueba también que el volumen del móvil esté subido.</span>
   </div>
 
   <div id="offline-status" class="offline-status" hidden aria-live="polite"></div>
@@ -197,7 +196,6 @@
       <div class="announce-row fullscreen-row">
         <button type="button" class="small" id="btn-fullscreen">Pantalla completa</button>
       </div>
-      <p class="fg-audio-note" id="fg-audio-note">Los avisos solo suenan con precisión si tienes la app abierta y visible (usa "Pantalla completa"). Con el móvil bloqueado o la app en segundo plano, puede llegar una notificación, pero sin sonido personalizado.</p>
     </div>
 
     <div id="contacts-section" class="stack-block">
@@ -255,15 +253,17 @@
     <button type="button" id="alert-banner-dismiss" class="small">Cerrar</button>
   </div>
 
-  <div id="support-section" class="support-section" hidden>
-    <a id="btn-support" class="support-button" href="#" target="_blank" rel="noopener" hidden>Apoyar el proyecto</a>
+<div class="footer-group">
+    <div id="support-section" class="support-section" hidden>
+      <a id="btn-support" class="support-button" href="#" target="_blank" rel="noopener" hidden>Apoyar el proyecto</a>
+    </div>
+
+    <button type="button" id="btn-exit-kiosk" aria-label="Salir de pantalla completa" hidden>Salir</button>
+
+    <footer>
+      © 2026 Iker Fernández · <a href="https://instagram.com/ikerfer_photo" target="_blank" rel="noopener" class="footer-link">@ikerfer_photo</a>
+    </footer>
   </div>
-
-  <button type="button" id="btn-exit-kiosk" aria-label="Salir de pantalla completa" hidden>Salir</button>
-
-  <footer>
-    © 2026 Iker Fernández · <a href="https://instagram.com/ikerfer_photo" target="_blank" rel="noopener" class="footer-link">@ikerfer_photo</a>
-  </footer>
 </div>
 
 <script src="app.js" defer></script>

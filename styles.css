@@ -36,7 +36,7 @@
      Se aclaran para superar 7:1 (AAA) sin perder el significado semántico
      verde/ámbar. */
   --ok: #7aa878;
-  --warn: #e2954a;
+  --warn: #e85d3b;
   /* Para texto secundario que sí hay que leer para usar la app bien
      (avisos, recordatorios de volumen, duración) — no solo etiquetas de
      apoyo. #8b8779 (5.84:1) se lee mal con sol directo; esto da 9.9:1. */
@@ -170,16 +170,10 @@ header {
 }
 
 .about-body {
-  /* El resto de la app usa una escala compacta (raíz al 90%) pensada para
-     datos de un vistazo. Este panel es texto largo para leer de verdad, así
-     que fijamos un tamaño en px, independiente de esa escala, dentro del
-     rango recomendado (16-18px) para lectura cómoda en móvil. */
   font-size: 17px;
   line-height: 1.65;
   color: var(--paper-dim);
-  text-align: justify;
-  hyphens: none;
-  -webkit-hyphens: none;
+  text-align: left;
   word-break: normal;
   overflow-wrap: normal;
 }
@@ -212,11 +206,7 @@ header {
 
 .about-body li {
   margin-bottom: 0.55rem;
-  text-align: justify;
-  hyphens: none;
-  -webkit-hyphens: none;
-  word-break: normal;
-  overflow-wrap: normal;
+  text-align: left;
 }
 
 .about-body code {
@@ -1290,8 +1280,13 @@ body.kiosk .support-section {
   margin-top: 0.15rem;
 }
 
-footer {
+.footer-group {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+footer {
   padding: 1.75rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
   font-size: 0.72rem;
   color: var(--text-faint);

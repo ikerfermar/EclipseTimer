@@ -978,7 +978,7 @@ function renderContacts() {
       const geoDiv = document.createElement("div");
       geoDiv.className = "contact-geo";
       geoDiv.id = `geo-${r.tag}`;
-      geoDiv.textContent = `Alt ${geo.alt.toFixed(3)}° · Az ${geo.az.toFixed(3)}°`;
+      geoDiv.textContent = `Alt ${geo.alt.toFixed(1)}° · Az ${geo.az.toFixed(1)}°`;
       list.appendChild(geoDiv);
     }
   });
@@ -1903,7 +1903,7 @@ function tick() {
 
   if (c.c1 !== null) {
     const geo = sunAltAz(t, state.lat, state.lon);
-    setText(nodes.sunGeo, geo.alt > -1 ? `Alt ${geo.alt.toFixed(3)}° · Az ${geo.az.toFixed(3)}°` : "Sol bajo el horizonte");
+    setText(nodes.sunGeo, geo.alt > -1 ? `Alt ${geo.alt.toFixed(1)}° · Az ${geo.az.toFixed(1)}°` : "Sol bajo el horizonte");
   }
 
   updateCountdown(t, c);
