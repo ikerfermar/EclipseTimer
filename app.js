@@ -258,14 +258,14 @@ function mergeAlertCopyConfig(config) {
 }
 
 const CONFIG_FETCH_TIMEOUT_MS = 1500;
-const ELEVATION_FETCH_TIMEOUT_MS = 2500;
+const ELEVATION_FETCH_TIMEOUT_MS = 5000;
 const ELEVATION_API_BASE_URL = "https://api.open-meteo.com/v1/elevation";
 const LUNAR_PROFILE_META_FETCH_TIMEOUT_MS = 6000;
 const LUNAR_PROFILE_BIN_FETCH_TIMEOUT_MS = 20000;
 const LUNAR_PROFILE_META_URL = "assets/data/lunar_contacts_2026.meta.json";
 const LUNAR_PROFILE_BIN_URL = "assets/data/lunar_contacts_2026.u16.delta.gz";
 const ECLIPSE_T0_UTC_HOUR = T0_TDT - DELTA_T / 3600;
-const VIS_PROFILE_FETCH_TIMEOUT_MS = 2600;
+const VIS_PROFILE_FETCH_TIMEOUT_MS = 5000;
 const VIS_PROFILE_MAX_DISTANCE_M = 10000;
 // 3 momentos (C1, CM, C4) x este valor no puede superar el límite de 100
 // coordenadas por request de la Open-Meteo Elevation API.
@@ -775,15 +775,7 @@ function renderVisibilityProfile(data) {
     ? "El eclipse es visible desde este punto en C1, Máx. y C4."
     : `El relieve bloquea la visibilidad en ${blockedMoments.join(", ")}.`;
 
-  const c1 = data.moments.find((m) => m.id === "C1");
-  const cm = data.moments.find((m) => m.id === "CM");
-  const c4 = data.moments.find((m) => m.id === "C4");
-  const parts = [];
-  if (c1) parts.push(`C1 alt ${c1.altDeg.toFixed(1)}° · az ${c1.azDeg.toFixed(1)}°`);
-  if (cm) parts.push(`Máx. alt ${cm.altDeg.toFixed(1)}° · az ${cm.azDeg.toFixed(1)}°`);
-  if (c4) parts.push(`C4 alt ${c4.altDeg.toFixed(1)}° · az ${c4.azDeg.toFixed(1)}°`);
-  parts.push(`alcance ${formatDistanceM(data.maxDistanceM)}`);
-  note.textContent = parts.join(" · ");
+  note.textContent = "";
 }
 
 async function updateVisibilityProfile(contacts, lat, lon, observerAlt) {
@@ -1647,26 +1639,21 @@ function renderContacts() {
     const totalDurSec = (c.c4 - c.c1) * 3600;
     const visEnd = visibleEndTime(c);
     const visibleDurSec = visEnd !== null ? (visEnd - c.c1) * 3600 : null;
-    const lines = [];
+    const fields = [];
     if (c.total) {
       const durSec = (c.c3 - c.c2) * 3600;
-      lines.push(`Totalidad: ${formatDurationClock(durSec)}.`);
-      lines.push(`Eclipse completo (parcial + total): ${formatDurationClock(totalDurSec)}.`);
+      fields.push({ title: "Totalidad", value: formatDurationClock(durSec), primary: true });
+      fields.push({ title: "Eclipse completo (parcial + total)", value: formatDurationClock(totalDurSec) });
     } else {
-      lines.push(`Fuera de la franja de totalidad: solo parcial · Duración: ${formatDurationClock(totalDurSec)}.`);
+      fields.push({ title: "Solo parcial (fuera de la franja de totalidad)", value: formatDurationClock(totalDurSec) });
     }
     if (c.sunset !== null && c.sunset !== undefined && c.sunset < c.c4) {
-      lines.push(`Ocaso del Sol: ${fmtLocal(tToDate(c.sunset))}.`);
+      fields.push({ title: "Ocaso del Sol", value: fmtLocal(tToDate(c.sunset)), warning: true });
       if (visibleDurSec !== null) {
-        lines.push(`Duración visible hasta ocaso: ${formatDurationClock(visibleDurSec)}.`);
+        fields.push({ title: "Duración visible hasta ocaso", value: formatDurationClock(visibleDurSec) });
       }
     }
-    const nodes = lines.map((line) => {
-      const div = document.createElement("div");
-      div.className = "duration-line";
-      div.textContent = line;
-      return div;
-    });
+    const nodes = fields.map((field) => createDurationLine(field));
     nodes.push(createCopyTimesButton());
     if (eclipseMostlyBelowHorizon(c)) {
       const warning = document.createElement("div");
@@ -1717,6 +1704,24 @@ function buildTimesClipboardText() {
     contactLine("C4 fin eclipse", c.c4),
     ...durationLines(c)
   ].join("\n");
+}
+
+function createDurationLine(field) {
+  const div = document.createElement("div");
+  div.className = "duration-line";
+  if (field.primary) div.classList.add("is-primary");
+  if (field.warning) div.classList.add("is-warning");
+
+  const title = document.createElement("span");
+  title.className = "duration-title";
+  title.textContent = field.title;
+
+  const value = document.createElement("span");
+  value.className = "duration-value";
+  value.textContent = field.value;
+
+  div.append(title, value);
+  return div;
 }
 
 function createCopyTimesButton() {

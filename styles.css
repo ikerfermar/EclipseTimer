@@ -1180,12 +1180,52 @@ body.kiosk .contact-geo.active {
   border-top: 1px solid var(--line);
 }
 
+.duration-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
 .duration-line + .duration-line {
   margin-top: 0.12rem;
 }
 
 body.kiosk .duration-line + .duration-line {
   margin-top: 0.04rem;
+}
+
+.duration-title {
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.duration-value {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--text-outdoor);
+}
+
+.duration-line.is-primary {
+  margin-top: 0.15rem;
+  margin-bottom: 0.15rem;
+}
+
+.duration-line.is-primary .duration-title {
+  font-size: 0.82rem;
+  color: var(--text-outdoor);
+}
+
+.duration-line.is-primary .duration-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--corona);
+}
+
+.duration-line.is-warning .duration-title,
+.duration-line.is-warning .duration-value {
+  color: var(--warn);
 }
 
 .copy-times-button {
@@ -1269,10 +1309,6 @@ body.kiosk .duration-line + .duration-line {
 
 .legend-item.line-cm {
   color: #8f8b7f;
-}
-
-.legend-item.line-c4 {
-  color: #b2ada0;
 }
 
 .legend-item.observer {
