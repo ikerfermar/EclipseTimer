@@ -67,7 +67,6 @@ const AUDIO_ADVANCE_HOURS = AUDIO_ADVANCE_SEC / 3600;
 const LEON_PRESET = Object.freeze({
   lat: 42.5987,
   lon: -5.5671,
-  alt: 838,
   sourceLabel: "manual (León)"
 });
 const LOCATION_SOURCE_REAL = "real";
@@ -158,7 +157,6 @@ let state = {
   contacts: null,
   alertsFired: {},
   photoEnabled: false,
-  manualOffsetSec: 0,
   testMode: false,
   testStartWallMs: null,
   testStartVirtualT: null,
@@ -166,6 +164,8 @@ let state = {
   testSpeed: 1,
   locating: false,
   locationRequestId: 0,
+  altitudeRequestId: 0,
+  lunarProfileApplied: false,
   locationSourceKind: LOCATION_SOURCE_REAL
 };
 
@@ -200,6 +200,10 @@ let alertDisplayQueue = [];
 let alertDisplayActive = false;
 let countdownFlashTimer = null;
 let alertCopy = DEFAULT_ALERT_COPY;
+let lunarProfileDataset = null;
+let lunarProfileLoadPromise = null;
+let visibilityProfileRequestId = 0;
+const visibilityProfileCache = new Map();
 
 const DEFAULT_PAYPAL_CONFIG = {
   enabled: true,
@@ -254,16 +258,28 @@ function mergeAlertCopyConfig(config) {
 }
 
 const CONFIG_FETCH_TIMEOUT_MS = 1500;
+const ELEVATION_FETCH_TIMEOUT_MS = 2500;
+const ELEVATION_API_BASE_URL = "https://api.open-meteo.com/v1/elevation";
+const LUNAR_PROFILE_META_FETCH_TIMEOUT_MS = 6000;
+const LUNAR_PROFILE_BIN_FETCH_TIMEOUT_MS = 20000;
+const LUNAR_PROFILE_META_URL = "assets/data/lunar_contacts_2026.meta.json";
+const LUNAR_PROFILE_BIN_URL = "assets/data/lunar_contacts_2026.u16.delta.gz";
+const ECLIPSE_T0_UTC_HOUR = T0_TDT - DELTA_T / 3600;
+const VIS_PROFILE_FETCH_TIMEOUT_MS = 2600;
+const VIS_PROFILE_MAX_DISTANCE_M = 10000;
+// 3 momentos (C1, CM, C4) x este valor no puede superar el límite de 100
+// coordenadas por request de la Open-Meteo Elevation API.
+const VIS_PROFILE_SAMPLE_COUNT = 33;
 
 // fetch() no tiene timeout propio: con red lenta o intermitente (típico en
 // un sitio de observación remoto) podía tardar mucho en fallar. Como antes
 // se esperaba a esto antes de bindEvents(), los botones se quedaban sin
 // responder mientras tanto. Con la carrera contra el timeout, como mucho
 // tarda CONFIG_FETCH_TIMEOUT_MS y sigue con los valores por defecto.
-function fetchWithTimeout(url, timeoutMs) {
+function fetchWithTimeout(url, timeoutMs, fetchOptions = {}) {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error("config fetch timeout")), timeoutMs);
-    fetch(url, { cache: "no-cache" }).then(
+    fetch(url, { cache: "no-cache", ...fetchOptions }).then(
       (response) => {
         clearTimeout(timeoutId);
         resolve(response);
@@ -274,6 +290,581 @@ function fetchWithTimeout(url, timeoutMs) {
       }
     );
   });
+}
+
+// La altitud se obtiene del modelo de elevación usando lat/lon (sin entrada
+// manual) para simplificar el panel de ubicación.
+async function fetchAltitudeMeters(lat, lon) {
+  const params = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lon)
+  });
+  const response = await fetchWithTimeout(`${ELEVATION_API_BASE_URL}?${params.toString()}`, ELEVATION_FETCH_TIMEOUT_MS);
+  if (!response.ok) throw new Error("elevation api error");
+  const data = await response.json();
+  const value = Array.isArray(data?.elevation) ? data.elevation[0] : data?.elevation;
+  if (!Number.isFinite(value)) throw new Error("invalid elevation payload");
+  return Math.round(value);
+}
+
+function lonLatToWebMercator(lonDeg, latDeg) {
+  const x = 6378137 * lonDeg * D2R;
+  const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, latDeg));
+  const y = 6378137 * Math.log(Math.tan(Math.PI / 4 + (clampedLat * D2R) / 2));
+  return { x, y };
+}
+
+// Deshace in-place el filtro delta por fila (mod 65536) aplicado en el build
+// a cada una de las `bandCount` bandas concatenadas dentro de `arr`. Debe ser
+// el inverso exacto de deltaEncodeBand() en scripts/build-lunar-contacts.mjs.
+function undoRowDeltaInPlace(arr, width, height, cells, bandCount) {
+  for (let b = 0; b < bandCount; b += 1) {
+    const bandOffset = b * cells;
+    for (let r = 0; r < height; r += 1) {
+      const rowStart = bandOffset + r * width;
+      for (let c = 1; c < width; c += 1) {
+        const idx = rowStart + c;
+        arr[idx] = (arr[idx - 1] + arr[idx]) & 0xffff;
+      }
+    }
+  }
+}
+
+async function loadLunarProfileDataset() {
+  if (lunarProfileDataset) return lunarProfileDataset;
+  if (lunarProfileLoadPromise) return lunarProfileLoadPromise;
+
+  lunarProfileLoadPromise = (async () => {
+    const metaResponse = await fetchWithTimeout(LUNAR_PROFILE_META_URL, LUNAR_PROFILE_META_FETCH_TIMEOUT_MS, { cache: "force-cache" });
+    if (!metaResponse.ok) throw new Error("lunar profile meta unavailable");
+    const meta = await metaResponse.json();
+
+    const binResponse = await fetchWithTimeout(LUNAR_PROFILE_BIN_URL, LUNAR_PROFILE_BIN_FETCH_TIMEOUT_MS, { cache: "force-cache" });
+    if (!binResponse.ok) throw new Error("lunar profile binary unavailable");
+    if (typeof DecompressionStream !== "function" || !binResponse.body) {
+      throw new Error("gzip decompression unsupported");
+    }
+    const decompressedStream = binResponse.body.pipeThrough(new DecompressionStream("gzip"));
+    const buffer = await new Response(decompressedStream).arrayBuffer();
+
+    const width = Number(meta.width);
+    const height = Number(meta.height);
+    const nodata = Number(meta.nodata);
+    const scaleX = Number(meta.pixelScaleX);
+    const scaleY = Number(meta.pixelScaleY);
+    const tieX = Number(meta.tieX);
+    const tieY = Number(meta.tieY);
+    const encoding = typeof meta.encoding === "string" ? meta.encoding : "f32-planar";
+    const quantization = meta.quantization && typeof meta.quantization === "object"
+      ? meta.quantization
+      : null;
+
+    if (![width, height, scaleX, scaleY, tieX, tieY, nodata].every(Number.isFinite)) {
+      throw new Error("invalid lunar profile metadata");
+    }
+
+    const cells = width * height;
+    let arr;
+    if (encoding === "u16-linear-per-band") {
+      arr = new Uint16Array(buffer);
+      if (arr.length !== cells * 4) throw new Error("unexpected lunar profile binary size");
+      // El fichero servido está delta-codificado por fila (mod 65536, filtro
+      // tipo PNG "Sub") + gzip para bajar de 88.6 MB a ~5.4 MB. Se deshace
+      // aquí con una suma acumulada por fila, banda a banda, incluyendo los
+      // píxeles nodata (65535) como un valor más: el codificador de build
+      // (scripts/build-lunar-contacts.mjs) tampoco los trata como caso
+      // especial, así que la reconstrucción es exacta bit a bit.
+      undoRowDeltaInPlace(arr, width, height, cells, 4);
+    } else {
+      arr = new Float32Array(buffer);
+      if (arr.length !== cells * 4) throw new Error("unexpected lunar profile binary size");
+    }
+
+    lunarProfileDataset = {
+      width,
+      height,
+      nodata,
+      scaleX,
+      scaleY,
+      tieX,
+      tieY,
+      encoding,
+      quantization,
+      data: arr,
+      cells,
+      offsets: {
+        c1: 0,
+        c2: cells,
+        c3: cells * 2,
+        c4: cells * 3
+      }
+    };
+    return lunarProfileDataset;
+  })().catch((err) => {
+    lunarProfileDataset = null;
+    throw err;
+  }).finally(() => {
+    lunarProfileLoadPromise = null;
+  });
+
+  return lunarProfileLoadPromise;
+}
+
+function sampleProfileNearest(dataset, bandName, row, col) {
+  const r = Math.max(0, Math.min(dataset.height - 1, Math.round(row)));
+  const c = Math.max(0, Math.min(dataset.width - 1, Math.round(col)));
+  const idx = dataset.offsets[bandName] + r * dataset.width + c;
+  const rawValue = dataset.data[idx];
+  if (!Number.isFinite(rawValue) || rawValue === dataset.nodata) return null;
+
+  if (dataset.encoding === "u16-linear-per-band") {
+    const q = dataset.quantization && dataset.quantization[bandName];
+    if (!q || !Number.isFinite(q.offsetHours) || !Number.isFinite(q.scaleHours)) return null;
+    return q.offsetHours + rawValue * q.scaleHours;
+  }
+  return rawValue;
+}
+
+function sampleProfileBilinear(dataset, bandName, row, col) {
+  if (row < 0 || col < 0 || row > dataset.height - 1 || col > dataset.width - 1) return null;
+
+  const r0 = Math.floor(row);
+  const c0 = Math.floor(col);
+  const r1 = Math.min(dataset.height - 1, r0 + 1);
+  const c1 = Math.min(dataset.width - 1, c0 + 1);
+  const fr = row - r0;
+  const fc = col - c0;
+
+  const idx00 = dataset.offsets[bandName] + r0 * dataset.width + c0;
+  const idx10 = dataset.offsets[bandName] + r1 * dataset.width + c0;
+  const idx01 = dataset.offsets[bandName] + r0 * dataset.width + c1;
+  const idx11 = dataset.offsets[bandName] + r1 * dataset.width + c1;
+
+  const v00 = dataset.data[idx00];
+  const v10 = dataset.data[idx10];
+  const v01 = dataset.data[idx01];
+  const v11 = dataset.data[idx11];
+  const allValid = [v00, v10, v01, v11].every((v) => Number.isFinite(v) && v !== dataset.nodata);
+  if (!allValid) return sampleProfileNearest(dataset, bandName, row, col);
+
+  const top = v00 + (v01 - v00) * fc;
+  const bottom = v10 + (v11 - v10) * fc;
+  const raw = top + (bottom - top) * fr;
+  if (dataset.encoding === "u16-linear-per-band") {
+    const q = dataset.quantization && dataset.quantization[bandName];
+    if (!q || !Number.isFinite(q.offsetHours) || !Number.isFinite(q.scaleHours)) return null;
+    return q.offsetHours + raw * q.scaleHours;
+  }
+  return raw;
+}
+
+function sampleLunarProfileContacts(dataset, lat, lon) {
+  const p = lonLatToWebMercator(lon, lat);
+  const col = (p.x - dataset.tieX) / dataset.scaleX;
+  const row = (dataset.tieY - p.y) / dataset.scaleY;
+
+  if (row < 0 || col < 0 || row > dataset.height - 1 || col > dataset.width - 1) {
+    return null;
+  }
+
+  const c1 = sampleProfileBilinear(dataset, "c1", row, col);
+  const c2 = sampleProfileBilinear(dataset, "c2", row, col);
+  const c3 = sampleProfileBilinear(dataset, "c3", row, col);
+  const c4 = sampleProfileBilinear(dataset, "c4", row, col);
+  if (![c1, c2, c3, c4].every((v) => Number.isFinite(v))) return null;
+
+  // El dataset externo viene en horas UTC del día del eclipse. El resto de la
+  // app usa horas relativas al t0 besseliano (dominio TDT/UT equivalente como
+  // duración), así que convertimos aquí una sola vez para evitar desfases.
+  const c1Rel = c1 - ECLIPSE_T0_UTC_HOUR;
+  const c2Rel = c2 - ECLIPSE_T0_UTC_HOUR;
+  const c3Rel = c3 - ECLIPSE_T0_UTC_HOUR;
+  const c4Rel = c4 - ECLIPSE_T0_UTC_HOUR;
+
+  if (!(c1Rel < c2Rel && c2Rel < c3Rel && c3Rel < c4Rel)) return null;
+  return { c1: c1Rel, c2: c2Rel, c3: c3Rel, c4: c4Rel };
+}
+
+async function resolveLunarProfileContacts(lat, lon) {
+  const resolveOnce = async () => {
+    const dataset = await loadLunarProfileDataset();
+    const contacts = sampleLunarProfileContacts(dataset, lat, lon);
+    if (!contacts) return { available: true, applied: false };
+    return { available: true, applied: true, contacts };
+  };
+
+  try {
+    return await resolveOnce();
+  } catch (_) {
+    // Reintento único para evitar falsos negativos por timeout/transición de red.
+    try {
+      return await resolveOnce();
+    } catch (_retryErr) {
+      return { available: false, applied: false };
+    }
+  }
+}
+
+function destinationPoint(latDeg, lonDeg, bearingDeg, distanceM) {
+  const angular = distanceM / 6378137;
+  const brng = bearingDeg * D2R;
+  const lat1 = latDeg * D2R;
+  const lon1 = lonDeg * D2R;
+
+  const sinLat1 = Math.sin(lat1);
+  const cosLat1 = Math.cos(lat1);
+  const sinAngular = Math.sin(angular);
+  const cosAngular = Math.cos(angular);
+
+  const lat2 = Math.asin(sinLat1 * cosAngular + cosLat1 * sinAngular * Math.cos(brng));
+  const lon2 = lon1 + Math.atan2(
+    Math.sin(brng) * sinAngular * cosLat1,
+    cosAngular - sinLat1 * Math.sin(lat2)
+  );
+
+  let lonOut = lon2 * R2D;
+  while (lonOut > 180) lonOut -= 360;
+  while (lonOut < -180) lonOut += 360;
+  return { lat: lat2 * R2D, lon: lonOut };
+}
+
+function profileKey(lat, lon, moments, observerAlt) {
+  const geoKey = moments
+    .map((m) => `${m.id}:${m.geo.az.toFixed(1)}:${m.geo.alt.toFixed(1)}`)
+    .join("|");
+  return [lat.toFixed(4), lon.toFixed(4), Math.round(observerAlt), geoKey].join("|");
+}
+
+function parseElevationArray(payload) {
+  if (!payload) return null;
+  if (Array.isArray(payload.elevation)) return payload.elevation;
+  if (Array.isArray(payload.elevations)) return payload.elevations;
+  return null;
+}
+
+async function fetchTerrainProfile(points) {
+  const params = new URLSearchParams({
+    latitude: points.map((p) => p.lat.toFixed(6)).join(","),
+    longitude: points.map((p) => p.lon.toFixed(6)).join(",")
+  });
+  const response = await fetchWithTimeout(`https://api.open-meteo.com/v1/elevation?${params.toString()}`, VIS_PROFILE_FETCH_TIMEOUT_MS);
+  if (!response.ok) throw new Error("terrain profile unavailable");
+  const data = await response.json();
+  const values = parseElevationArray(data);
+  if (!Array.isArray(values) || values.length !== points.length) throw new Error("invalid terrain profile payload");
+  const parsed = values.map((v) => Number(v));
+  if (!parsed.every(Number.isFinite)) throw new Error("invalid terrain profile values");
+  return parsed;
+}
+
+function maximumEclipseTime(c) {
+  if (!c || c.c1 === null || c.c4 === null) return null;
+  if (c.total && c.c2 !== null && c.c3 !== null) return (c.c2 + c.c3) / 2;
+  if (!c.obs) return (c.c1 + c.c4) / 2;
+
+  let lo = c.c1;
+  let hi = c.c4;
+  for (let i = 0; i < 48; i += 1) {
+    const m1 = lo + (hi - lo) / 3;
+    const m2 = hi - (hi - lo) / 3;
+    const f1 = circumstances(m1, c.obs).m;
+    const f2 = circumstances(m2, c.obs).m;
+    if (f1 < f2) hi = m2;
+    else lo = m1;
+  }
+  return (lo + hi) / 2;
+}
+
+function buildVisibilityMoments(c, lat, lon) {
+  if (!c || c.c1 === null || c.c4 === null) return [];
+
+  const moments = [];
+  if (Number.isFinite(c.c1)) {
+    moments.push({ id: "C1", label: "C1", time: c.c1 });
+  }
+
+  const midTotality = c.total && Number.isFinite(c.c2) && Number.isFinite(c.c3)
+    ? (c.c2 + c.c3) / 2
+    : maximumEclipseTime(c);
+  if (Number.isFinite(midTotality)) {
+    moments.push({ id: "CM", label: "Máx.", time: midTotality });
+  }
+
+  if (Number.isFinite(c.c4)) {
+    moments.push({ id: "C4", label: "C4", time: c.c4 });
+  }
+
+  return moments.map((m) => ({
+    ...m,
+    geo: sunAltAz(m.time, lat, lon)
+  }));
+}
+
+function buildVisibilityPath(points, xScale, yScale) {
+  return points.map((p, idx) => `${idx === 0 ? "M" : "L"}${xScale(p.x).toFixed(2)},${yScale(p.y).toFixed(2)}`).join(" ");
+}
+
+function formatDistanceM(meters) {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(0)} km`;
+  return `${Math.round(meters)} m`;
+}
+
+function renderVisibilityProfileUnavailable(msg) {
+  const wrap = $("visibility-profile");
+  const summary = $("visibility-profile-summary");
+  const chart = $("visibility-profile-svg");
+  const note = $("visibility-profile-note");
+  if (!wrap || !summary || !chart || !note) return;
+
+  wrap.hidden = false;
+  summary.textContent = msg;
+  chart.innerHTML = "";
+  note.textContent = "";
+}
+
+function renderVisibilityProfile(data) {
+  const wrap = $("visibility-profile");
+  const summary = $("visibility-profile-summary");
+  const chart = $("visibility-profile-svg");
+  const note = $("visibility-profile-note");
+  if (!wrap || !summary || !chart || !note) return;
+
+  wrap.hidden = false;
+  const ns = "http://www.w3.org/2000/svg";
+  chart.innerHTML = "";
+
+  const width = 320;
+  const height = 170;
+  const mLeft = 38;
+  const mRight = 12;
+  const mTop = 12;
+  const mBottom = 28;
+  const plotW = width - mLeft - mRight;
+  const plotH = height - mTop - mBottom;
+
+  const allTerrain = data.moments.flatMap((m) => m.terrainElev);
+  const allLines = data.moments.flatMap((m) => m.lineElev);
+  const yMinRaw = Math.min(...allTerrain, ...allLines, data.observerAlt);
+  const yMaxRaw = Math.max(...allTerrain, ...allLines, data.observerAlt);
+  let yMin = Math.floor((yMinRaw - 20) / 50) * 50;
+  let yMax = Math.ceil((yMaxRaw + 20) / 50) * 50;
+  if (yMax - yMin < 180) yMax = yMin + 180;
+
+  const xScale = (x) => mLeft + (x / data.maxDistanceM) * plotW;
+  const yScale = (y) => mTop + (1 - (y - yMin) / (yMax - yMin)) * plotH;
+
+  const primaryMoment = data.moments[data.primaryMomentIndex] || data.moments[0];
+  const horizonPath = data.distances.map((d, i) => ({ x: d, y: primaryMoment.terrainElev[i] }));
+
+  const axis = document.createElementNS(ns, "path");
+  axis.setAttribute("d", `M${mLeft},${mTop} V${mTop + plotH} H${mLeft + plotW}`);
+  axis.setAttribute("stroke", "rgba(220,220,220,0.55)");
+  axis.setAttribute("stroke-width", "1");
+  axis.setAttribute("fill", "none");
+  chart.appendChild(axis);
+
+  const yTicks = 4;
+  for (let i = 0; i <= yTicks; i += 1) {
+    const yVal = yMin + ((yMax - yMin) * i) / yTicks;
+    const y = yScale(yVal);
+    const grid = document.createElementNS(ns, "line");
+    grid.setAttribute("x1", String(mLeft));
+    grid.setAttribute("x2", String(mLeft + plotW));
+    grid.setAttribute("y1", String(y));
+    grid.setAttribute("y2", String(y));
+    grid.setAttribute("stroke", "rgba(220,220,220,0.18)");
+    grid.setAttribute("stroke-width", "1");
+    chart.appendChild(grid);
+
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("x", String(mLeft - 6));
+    label.setAttribute("y", String(y + 3));
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("font-size", "10");
+    label.setAttribute("fill", "#b8b5aa");
+    label.textContent = String(Math.round(yVal));
+    chart.appendChild(label);
+  }
+
+  const xTicks = [0, data.maxDistanceM * 0.5, data.maxDistanceM];
+  xTicks.forEach((xVal, idx) => {
+    const x = xScale(xVal);
+    const tick = document.createElementNS(ns, "line");
+    tick.setAttribute("x1", String(x));
+    tick.setAttribute("x2", String(x));
+    tick.setAttribute("y1", String(mTop + plotH));
+    tick.setAttribute("y2", String(mTop + plotH + 4));
+    tick.setAttribute("stroke", "rgba(220,220,220,0.45)");
+    chart.appendChild(tick);
+
+    const label = document.createElementNS(ns, "text");
+    const isFirst = idx === 0;
+    const isLast = idx === xTicks.length - 1;
+    label.setAttribute("x", String(isFirst ? x + 1 : (isLast ? x - 1 : x)));
+    label.setAttribute("y", String(mTop + plotH + 16));
+    label.setAttribute("text-anchor", isFirst ? "start" : (isLast ? "end" : "middle"));
+    label.setAttribute("font-size", "10");
+    label.setAttribute("fill", "#b8b5aa");
+    label.textContent = xVal === 0 ? "0" : formatDistanceM(xVal);
+    chart.appendChild(label);
+  });
+
+  const terrain = document.createElementNS(ns, "path");
+  terrain.setAttribute("d", buildVisibilityPath(horizonPath, xScale, yScale));
+  terrain.setAttribute("stroke", "#949083");
+  terrain.setAttribute("stroke-width", "2");
+  terrain.setAttribute("fill", "none");
+  chart.appendChild(terrain);
+
+  // C1 y C4 comparten exactamente el mismo color y trazo (son los dos
+  // contactos parciales) con un 50% de opacidad; Máx. (CM) queda con su
+  // propio estilo, opaco, para distinguirse de ambas.
+  const lineStyleMap = {
+    C1: { stroke: "#6f6c63", dash: "3 3", opacity: "0.5" },
+    CM: { stroke: "#8f8b7f", dash: "4 3", opacity: "1" },
+    C4: { stroke: "#6f6c63", dash: "3 3", opacity: "0.5" }
+  };
+
+  data.moments.forEach((moment) => {
+    const pathPoints = data.distances.map((d, i) => ({ x: d, y: moment.lineElev[i] }));
+    const line = document.createElementNS(ns, "path");
+    const style = lineStyleMap[moment.id] || lineStyleMap.CM;
+    line.setAttribute("d", buildVisibilityPath(pathPoints, xScale, yScale));
+    line.setAttribute("stroke", style.stroke);
+    line.setAttribute("stroke-width", "1.8");
+    line.setAttribute("stroke-dasharray", style.dash);
+    line.setAttribute("stroke-opacity", style.opacity);
+    line.setAttribute("fill", "none");
+    chart.appendChild(line);
+  });
+
+  const observer = document.createElementNS(ns, "circle");
+  observer.setAttribute("cx", String(xScale(0)));
+  observer.setAttribute("cy", String(yScale(data.observerAlt)));
+  observer.setAttribute("r", "4");
+  observer.setAttribute("fill", "#a8a396");
+  chart.appendChild(observer);
+
+  const momentLabelsSorted = [...data.moments]
+    .map((m) => ({ ...m, endY: yScale(m.lineEndElev) }))
+    .sort((a, b) => a.endY - b.endY);
+
+  momentLabelsSorted.forEach((moment, idx) => {
+    const sunStyle = lineStyleMap[moment.id] || lineStyleMap.CM;
+    const sun = document.createElementNS(ns, "circle");
+    sun.setAttribute("cx", String(xScale(data.maxDistanceM)));
+    sun.setAttribute("cy", String(moment.endY));
+    sun.setAttribute("r", "3.8");
+    sun.setAttribute("fill", "#e0ac5c");
+    sun.setAttribute("fill-opacity", sunStyle.opacity);
+    chart.appendChild(sun);
+
+    const label = document.createElementNS(ns, "text");
+    const yOffset = idx * 10;
+    label.setAttribute("x", String(xScale(data.maxDistanceM) - 24));
+    label.setAttribute("y", String(moment.endY - 4 - yOffset));
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("font-size", "9");
+    label.setAttribute("fill", "#8b8779");
+    label.textContent = moment.label;
+    chart.appendChild(label);
+  });
+
+  const blockedMoments = data.moments.filter((m) => m.minClearanceM < 0).map((m) => m.label);
+  summary.textContent = blockedMoments.length === 0
+    ? "El eclipse es visible desde este punto en C1, Máx. y C4."
+    : `El relieve bloquea la visibilidad en ${blockedMoments.join(", ")}.`;
+
+  const c1 = data.moments.find((m) => m.id === "C1");
+  const cm = data.moments.find((m) => m.id === "CM");
+  const c4 = data.moments.find((m) => m.id === "C4");
+  const parts = [];
+  if (c1) parts.push(`C1 alt ${c1.altDeg.toFixed(1)}° · az ${c1.azDeg.toFixed(1)}°`);
+  if (cm) parts.push(`Máx. alt ${cm.altDeg.toFixed(1)}° · az ${cm.azDeg.toFixed(1)}°`);
+  if (c4) parts.push(`C4 alt ${c4.altDeg.toFixed(1)}° · az ${c4.azDeg.toFixed(1)}°`);
+  parts.push(`alcance ${formatDistanceM(data.maxDistanceM)}`);
+  note.textContent = parts.join(" · ");
+}
+
+async function updateVisibilityProfile(contacts, lat, lon, observerAlt) {
+  const requestId = ++visibilityProfileRequestId;
+  if (!contacts || contacts.c1 === null || contacts.c4 === null) {
+    const wrap = $("visibility-profile");
+    if (wrap) wrap.hidden = true;
+    return;
+  }
+
+  const moments = buildVisibilityMoments(contacts, lat, lon);
+  if (!moments.length) {
+    renderVisibilityProfileUnavailable("Perfil no disponible para esta ubicación.");
+    return;
+  }
+
+  const key = profileKey(lat, lon, moments, observerAlt);
+  if (visibilityProfileCache.has(key)) {
+    if (requestId !== visibilityProfileRequestId) return;
+    renderVisibilityProfile(visibilityProfileCache.get(key));
+    return;
+  }
+
+  renderVisibilityProfileUnavailable("Calculando perfil de visibilidad...");
+
+  const distances = [];
+  const step = VIS_PROFILE_MAX_DISTANCE_M / (VIS_PROFILE_SAMPLE_COUNT - 1);
+  for (let i = 0; i < VIS_PROFILE_SAMPLE_COUNT; i += 1) {
+    const d = i * step;
+    distances.push(d);
+  }
+
+  const pointsByMoment = moments.map((moment) => distances.map((d) => (
+    d === 0 ? { lat, lon } : destinationPoint(lat, lon, moment.geo.az, d)
+  )));
+  const allPoints = pointsByMoment.flat();
+
+  try {
+    const terrainAll = await fetchTerrainProfile(allPoints);
+    if (requestId !== visibilityProfileRequestId) return;
+
+    const momentPayloads = moments.map((moment, idx) => {
+      const start = idx * VIS_PROFILE_SAMPLE_COUNT;
+      const end = start + VIS_PROFILE_SAMPLE_COUNT;
+      const terrain = terrainAll.slice(start, end);
+      const lineElev = distances.map((d) => observerAlt + Math.tan(moment.geo.alt * D2R) * d);
+      const clearance = terrain.map((e, i) => lineElev[i] - e);
+      return {
+        id: moment.id,
+        label: moment.label,
+        azDeg: moment.geo.az,
+        altDeg: moment.geo.alt,
+        terrainElev: terrain,
+        lineElev,
+        lineEndElev: lineElev[lineElev.length - 1],
+        minClearanceM: Math.min(...clearance)
+      };
+    });
+
+    const primaryMomentIndex = Math.max(0, momentPayloads.findIndex((m) => m.id === "CM"));
+
+    const payload = {
+      distances,
+      observerAlt,
+      moments: momentPayloads,
+      primaryMomentIndex,
+      maxDistanceM: VIS_PROFILE_MAX_DISTANCE_M,
+      lastUpdatedMs: Date.now()
+    };
+
+    visibilityProfileCache.set(key, payload);
+    if (visibilityProfileCache.size > 10) {
+      const firstKey = visibilityProfileCache.keys().next().value;
+      visibilityProfileCache.delete(firstKey);
+    }
+
+    renderVisibilityProfile(payload);
+  } catch (_) {
+    if (requestId !== visibilityProfileRequestId) return;
+    renderVisibilityProfileUnavailable("No se pudo cargar el perfil de terreno (sin conexión o servicio no disponible).");
+  }
 }
 
 async function loadAlertCopyConfig() {
@@ -324,9 +915,6 @@ function loadAlertPrefs() {
     if (typeof parsed.photoEnabled === "boolean") {
       state.photoEnabled = parsed.photoEnabled;
     }
-    if (typeof parsed.manualOffsetSec === "number" && Number.isFinite(parsed.manualOffsetSec)) {
-      state.manualOffsetSec = parsed.manualOffsetSec;
-    }
   } catch (_) {
     // ignore malformed local storage
   }
@@ -338,8 +926,7 @@ function saveAlertPrefs() {
     const existing = raw ? JSON.parse(raw) : {};
     localStorage.setItem(PREFS_KEY, JSON.stringify({
       ...existing,
-      photoEnabled: state.photoEnabled,
-      manualOffsetSec: state.manualOffsetSec
+      photoEnabled: state.photoEnabled
     }));
   } catch (_) {
     // ignore storage failures
@@ -348,7 +935,7 @@ function saveAlertPrefs() {
 
 // Guarda la última ubicación válida para no depender de volver a pedirla
 // (GPS) o teclearla a mano el día del eclipse.
-function saveLastLocation(lat, lon, alt, sourceLabel) {
+function saveLastLocation(lat, lon, sourceLabel) {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     const existing = raw ? JSON.parse(raw) : {};
@@ -356,7 +943,6 @@ function saveLastLocation(lat, lon, alt, sourceLabel) {
       ...existing,
       lastLat: lat,
       lastLon: lon,
-      lastAlt: alt,
       lastSourceLabel: sourceLabel || "manual",
       lastSourceKind: LOCATION_SOURCE_REAL
     }));
@@ -372,7 +958,6 @@ function clearLastLocation() {
     const existing = JSON.parse(raw);
     delete existing.lastLat;
     delete existing.lastLon;
-    delete existing.lastAlt;
     delete existing.lastSourceLabel;
     delete existing.lastSourceKind;
     localStorage.setItem(PREFS_KEY, JSON.stringify(existing));
@@ -400,7 +985,6 @@ function loadLastLocation() {
       return {
         lat: parsed.lastLat,
         lon: parsed.lastLon,
-        alt: typeof parsed.lastAlt === "number" ? parsed.lastAlt : 0,
         sourceLabel: parsed.lastSourceLabel || "manual"
       };
     }
@@ -415,9 +999,12 @@ function syncAlertControlsFromState() {
   if (master) master.checked = state.photoEnabled;
   const photoSubsection = $("photo-subsection");
   if (photoSubsection) photoSubsection.classList.toggle("is-disabled", !state.photoEnabled);
-  const offsetInput = $("in-manual-offset");
-  if (offsetInput) offsetInput.value = state.manualOffsetSec;
   renderAlertSummaries();
+}
+
+function stripComputedAltitudeSuffix(sourceText) {
+  if (typeof sourceText !== "string") return "";
+  return sourceText.replace(/\s·\salt\s(?:n\/d|-?\d+\s*m)$/i, "");
 }
 
 function bindAlertControls() {
@@ -448,6 +1035,17 @@ function besselAt(t) {
   };
 }
 
+// Refracción atmosférica estándar (Bennett/Saemundsson): se suma a la
+// altitud geométrica para mostrar altitud aparente cerca del horizonte.
+function atmosphericRefractionDeg(altTrueDeg) {
+  if (!Number.isFinite(altTrueDeg)) return 0;
+  if (altTrueDeg < -1 || altTrueDeg > 89.9) return 0;
+  const argDeg = altTrueDeg + 10.3 / (altTrueDeg + 5.11);
+  const tanArg = Math.tan(argDeg * D2R);
+  if (!Number.isFinite(tanArg) || Math.abs(tanArg) < 1e-6) return 0;
+  return (1.02 / tanArg) / 60;
+}
+
 function sunAltAz(t, latDeg, lonEastDeg) {
   const b = besselAt(t);
   const dec = b.d * D2R;
@@ -455,13 +1053,14 @@ function sunAltAz(t, latDeg, lonEastDeg) {
   const H = (b.mu + lonEastDeg) * D2R;
 
   const sinAlt = Math.sin(lat) * Math.sin(dec) + Math.cos(lat) * Math.cos(dec) * Math.cos(H);
-  const alt = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
+  const altTrueDeg = Math.asin(Math.max(-1, Math.min(1, sinAlt))) * R2D;
+  const alt = altTrueDeg + atmosphericRefractionDeg(altTrueDeg);
   const azY = -Math.cos(dec) * Math.sin(H);
   const azX = Math.sin(dec) * Math.cos(lat) - Math.cos(dec) * Math.sin(lat) * Math.cos(H);
 
   let az = Math.atan2(azY, azX) * R2D;
   if (az < 0) az += 360;
-  return { alt: alt * R2D, az };
+  return { alt, altTrue: altTrueDeg, az };
 }
 
 function observerGeocentric(latDeg, lonEastDeg, heightM) {
@@ -649,8 +1248,9 @@ function setupHemiToggle(btnId, pair) {
 function markManualLocationInput() {
   state.locationSourceKind = LOCATION_SOURCE_REAL;
   const source = $("loc-source");
-  if (source && source.textContent === LEON_PRESET.sourceLabel) {
+  if (source && stripComputedAltitudeSuffix(source.textContent) === LEON_PRESET.sourceLabel) {
     source.textContent = "manual";
+    source.classList.remove("warn");
   }
 }
 
@@ -787,14 +1387,14 @@ function requestCurrentPosition(options) {
 function applyGeolocationPosition(pos, sourcePrefix) {
   state.lat = pos.coords.latitude;
   state.lon = pos.coords.longitude;
-  state.alt = pos.coords.altitude || 0;
   state.locationSourceKind = LOCATION_SOURCE_REAL;
   writeLat(state.lat);
   writeLon(state.lon);
-  $("in-alt").value = Math.round(state.alt);
 
   const accuracy = Number.isFinite(pos.coords.accuracy) ? Math.round(pos.coords.accuracy) : null;
-  $("loc-source").textContent = accuracy === null ? sourcePrefix : `${sourcePrefix} · ±${accuracy} m`;
+  const source = $("loc-source");
+  source.textContent = accuracy === null ? sourcePrefix : `${sourcePrefix} · ±${accuracy} m`;
+  source.classList.remove("warn");
   if (accuracy !== null && accuracy > 100) {
     setLocStatus("GPS con precisión baja. Revisa coordenadas si estás cerca del límite de totalidad.", "warn");
   } else {
@@ -859,9 +1459,9 @@ function restoreLastLocation() {
 
   writeLat(saved.lat);
   writeLon(saved.lon);
-  $("in-alt").value = Math.round(saved.alt);
   state.locationSourceKind = LOCATION_SOURCE_REAL;
   $("loc-source").textContent = saved.sourceLabel;
+  $("loc-source").classList.remove("warn");
   setLocStatus("Última ubicación guardada recuperada. Recalculando...", "ok");
   // No pedimos permisos de audio/notificaciones aquí: no es un gesto de
   // usuario real, así que en iOS no serviría de nada intentarlo en
@@ -873,34 +1473,64 @@ function restoreLastLocation() {
   }
 }
 
-function recalc(options = {}) {
+async function recalc(options = {}) {
   cancelLocateRequest("Usando coordenadas actuales.", "ok");
 
   const lat = readLat();
   const lon = readLon();
-  const alt = parseDecimal($("in-alt").value) || 0;
 
   if (Number.isNaN(lat) || Number.isNaN(lon)) {
     setLocStatus("Introduce latitud y longitud válidas.", "err");
     return;
   }
 
+  const sourceEl = $("loc-source");
+  const sourceBase = stripComputedAltitudeSuffix(sourceEl?.textContent || "") || "manual";
+  const altitudeRequestId = ++state.altitudeRequestId;
+  setLocStatus("Actualizando cálculo...", "");
+
+  // Perfil lunar y altitud se consultan en paralelo para reducir latencia.
+  const altitudePromise = fetchAltitudeMeters(lat, lon)
+    .then((value) => ({ ok: true, value }))
+    .catch(() => ({ ok: false, value: 0 }));
+  const lunarProfilePromise = resolveLunarProfileContacts(lat, lon);
+
+  const altitudeResult = await altitudePromise;
+  let alt = altitudeResult.value;
+  const altitudeResolved = altitudeResult.ok;
+
+  if (altitudeRequestId !== state.altitudeRequestId) return;
+
   state.lat = lat;
   state.lon = lon;
   state.alt = alt;
   state.contacts = computeContacts(lat, lon, alt);
+  const lunarProfile = await lunarProfilePromise;
+  if (altitudeRequestId !== state.altitudeRequestId) return;
+  state.lunarProfileApplied = !!lunarProfile.applied;
+  if (lunarProfile.applied) {
+    state.contacts.c1 = lunarProfile.contacts.c1;
+    state.contacts.c2 = lunarProfile.contacts.c2;
+    state.contacts.c3 = lunarProfile.contacts.c3;
+    state.contacts.c4 = lunarProfile.contacts.c4;
+    state.contacts.total = state.contacts.c2 !== null && state.contacts.c3 !== null;
+  }
+  state.contacts.sunset = computeSunsetDuringEclipse(state.contacts, lat, lon);
 
-  // Corrección opcional (perfil del limbo lunar / fuente más precisa
-  // para esta ubicación, p. ej. el mapa interactivo de Xavier Jubier). Se
-  // aplica solo a C2/C3, que son los contactos sensibles a la forma real
-  // del borde lunar; C1/C4 se dejan tal cual los da el cálculo besseliano.
-  const offsetInput = $("in-manual-offset");
-  const offsetSec = offsetInput ? (parseDecimal(offsetInput.value) || 0) : 0;
-  state.manualOffsetSec = offsetSec;
-  if (offsetSec !== 0) {
-    const offsetHours = offsetSec / 3600;
-    if (state.contacts.c2 !== null) state.contacts.c2 += offsetHours;
-    if (state.contacts.c3 !== null) state.contacts.c3 += offsetHours;
+  if (sourceEl) {
+    sourceEl.classList.toggle("warn", !altitudeResolved || !lunarProfile.applied);
+    sourceEl.textContent = sourceBase;
+  }
+  if (altitudeResolved && lunarProfile.applied) {
+    setLocStatus("Cálculo actualizado.", "ok");
+  } else if (altitudeResolved && lunarProfile.available && !lunarProfile.applied) {
+    setLocStatus("Cálculo actualizado. Perfil lunar fuera de cobertura local.", "warn");
+  } else if (altitudeResolved) {
+    setLocStatus("Cálculo actualizado. Perfil lunar no disponible.", "warn");
+  } else if (lunarProfile.applied) {
+    setLocStatus("Cálculo actualizado. Altitud no disponible (se usa 0 m).", "warn");
+  } else {
+    setLocStatus("Cálculo aproximado: sin altitud y sin perfil lunar.", "warn");
   }
 
   state.contacts.events = buildTimedEvents(state.contacts);
@@ -915,12 +1545,13 @@ function recalc(options = {}) {
   }
 
   if (state.locationSourceKind === LOCATION_SOURCE_REAL) {
-    saveLastLocation(lat, lon, alt, $("loc-source").textContent);
+    saveLastLocation(lat, lon, sourceBase);
   } else {
     clearLastLocation();
   }
   saveAlertPrefs();
   renderContacts();
+  updateVisibilityProfile(state.contacts, lat, lon, alt);
   updateAlertReadiness();
   applyPostLocationLayout(!!options.skipScroll);
 
@@ -937,7 +1568,31 @@ function eclipseMostlyBelowHorizon(c) {
   if (c.c1 === null || c.c4 === null) return false;
   const altStart = sunAltAz(c.c1, state.lat, state.lon).alt;
   const altEnd = sunAltAz(c.c4, state.lat, state.lon).alt;
-  return altStart <= -1 && altEnd <= -1;
+  return altStart <= 0 && altEnd <= 0;
+}
+
+function computeSunsetDuringEclipse(c, lat, lon) {
+  if (!c || c.c1 === null || c.c4 === null) return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  const altStart = sunAltAz(c.c1, lat, lon).alt;
+  const altEnd = sunAltAz(c.c4, lat, lon).alt;
+  if (!(altStart > 0 && altEnd <= 0)) return null;
+
+  return findRoot((t) => sunAltAz(t, lat, lon).alt, c.c1, c.c4);
+}
+
+function visibleEndTime(c) {
+  if (!c || c.c4 === null) return null;
+  if (c.sunset === null || c.sunset === undefined) return c.c4;
+  return Math.min(c.c4, c.sunset);
+}
+
+function formatDurationClock(durationSec) {
+  const sec = Math.max(0, Math.round(durationSec));
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return `${min} min ${rem} s`;
 }
 
 function renderContacts() {
@@ -990,17 +1645,21 @@ function renderContacts() {
     note.replaceChildren(line, createCopyTimesButton());
   } else {
     const totalDurSec = (c.c4 - c.c1) * 3600;
-    const totalMin = Math.floor(totalDurSec / 60);
-    const totalS = Math.round(totalDurSec % 60);
+    const visEnd = visibleEndTime(c);
+    const visibleDurSec = visEnd !== null ? (visEnd - c.c1) * 3600 : null;
     const lines = [];
     if (c.total) {
       const durSec = (c.c3 - c.c2) * 3600;
-      const mm = Math.floor(durSec / 60);
-      const ss = Math.round(durSec % 60);
-      lines.push(`Totalidad: ${mm} min ${ss} s.`);
-      lines.push(`Eclipse completo (parcial + total): ${totalMin} min ${totalS} s.`);
+      lines.push(`Totalidad: ${formatDurationClock(durSec)}.`);
+      lines.push(`Eclipse completo (parcial + total): ${formatDurationClock(totalDurSec)}.`);
     } else {
-      lines.push(`Fuera de la franja de totalidad: solo parcial · Duración: ${totalMin} min ${totalS} s.`);
+      lines.push(`Fuera de la franja de totalidad: solo parcial · Duración: ${formatDurationClock(totalDurSec)}.`);
+    }
+    if (c.sunset !== null && c.sunset !== undefined && c.sunset < c.c4) {
+      lines.push(`Ocaso del Sol: ${fmtLocal(tToDate(c.sunset))}.`);
+      if (visibleDurSec !== null) {
+        lines.push(`Duración visible hasta ocaso: ${formatDurationClock(visibleDurSec)}.`);
+      }
     }
     const nodes = lines.map((line) => {
       const div = document.createElement("div");
@@ -1026,17 +1685,21 @@ function durationLines(c) {
   if (!c || c.c1 === null) return ["No visible desde estas coordenadas."];
 
   const fullSec = (c.c4 - c.c1) * 3600;
-  const fullMin = Math.floor(fullSec / 60);
-  const fullS = Math.round(fullSec % 60);
-  if (!c.total) return [`Duración parcial: ${fullMin} min ${fullS} s`];
+  const lines = [];
+  if (!c.total) {
+    lines.push(`Duración parcial: ${formatDurationClock(fullSec)}`);
+  } else {
+    const totalitySec = (c.c3 - c.c2) * 3600;
+    lines.push(`Totalidad: ${formatDurationClock(totalitySec)}`);
+    lines.push(`Eclipse completo: ${formatDurationClock(fullSec)}`);
+  }
 
-  const totalitySec = (c.c3 - c.c2) * 3600;
-  const totalityMin = Math.floor(totalitySec / 60);
-  const totalityS = Math.round(totalitySec % 60);
-  return [
-    `Totalidad: ${totalityMin} min ${totalityS} s`,
-    `Eclipse completo: ${fullMin} min ${fullS} s`
-  ];
+  if (c.sunset !== null && c.sunset !== undefined && c.sunset < c.c4) {
+    lines.push(`Ocaso del Sol: ${fmtLocal(tToDate(c.sunset))}`);
+    lines.push(`Duración visible hasta ocaso: ${formatDurationClock((c.sunset - c.c1) * 3600)}`);
+  }
+
+  return lines;
 }
 
 function buildTimesClipboardText() {
@@ -1751,7 +2414,7 @@ function updateCountdown(t, c) {
     const ss = diffSec % 60;
     setText(nodes.cdClock, `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`);
     setText(nodes.cdEvent, next.name);
-    setText(nodes.cdLabel, "faltan para");
+    setText(nodes.cdLabel, "faltan");
   } else if (events.length) {
     setText(nodes.cdClock, "00:00:00");
     setText(nodes.cdEvent, "Eclipse finalizado");
@@ -1903,7 +2566,7 @@ function tick() {
 
   if (c.c1 !== null) {
     const geo = sunAltAz(t, state.lat, state.lon);
-    setText(nodes.sunGeo, geo.alt > -1 ? `Alt ${geo.alt.toFixed(1)}° · Az ${geo.az.toFixed(1)}°` : "Sol bajo el horizonte");
+    setText(nodes.sunGeo, geo.alt > 0 ? `Alt ${geo.alt.toFixed(1)}° · Az ${geo.az.toFixed(1)}°` : "Sol bajo el horizonte");
   }
 
   updateCountdown(t, c);
@@ -2046,8 +2709,8 @@ function bindEvents() {
     state.locationSourceKind = LOCATION_SOURCE_PRESET;
     writeLat(LEON_PRESET.lat);
     writeLon(LEON_PRESET.lon);
-    $("in-alt").value = LEON_PRESET.alt;
     $("loc-source").textContent = LEON_PRESET.sourceLabel;
+    $("loc-source").classList.remove("warn");
     setLocStatus("Coordenadas de León cargadas.", "ok");
     recalc();
   });
@@ -2109,7 +2772,7 @@ function bindEvents() {
     unlockAlertAudio();
     const c = state.contacts;
     if (!c || c.c2 === null || c.c3 === null) {
-      $("test-status").textContent = "Necesita totalidad. Prueba con León: 42.5987 N / 5.5671 O / 838 m.";
+      $("test-status").textContent = "Necesita totalidad. Prueba con León: 42.5987 N / 5.5671 O.";
       return;
     }
     state.testMode = true;
@@ -2129,11 +2792,11 @@ function bindEvents() {
     hideBanner();
   });
 
-  ["in-lat", "in-lon", "in-alt"].forEach((id) => {
+  ["in-lat", "in-lon"].forEach((id) => {
     $(id).addEventListener("input", markManualLocationInput);
   });
 
-  ["in-lat", "in-lon", "in-alt", "in-manual-offset"].forEach((id) => {
+  ["in-lat", "in-lon"].forEach((id) => {
     $(id).addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") recalc();
     });

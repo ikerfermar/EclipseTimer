@@ -173,9 +173,10 @@ header {
   font-size: 17px;
   line-height: 1.65;
   color: var(--paper-dim);
-  text-align: left;
+  text-align: justify;
   word-break: normal;
   overflow-wrap: normal;
+  hyphens: auto;
 }
 
 .about-body > p:first-child {
@@ -542,6 +543,10 @@ button.secondary {
   padding-top: 0.5rem;
 }
 
+.loc-source.warn {
+  color: var(--warn);
+}
+
 .coord-input-row {
   display: flex;
   align-items: center;
@@ -568,8 +573,7 @@ button.secondary {
   /* 16px explícitos, no relativos a la raíz (que va al 90% = ~14.4px con
      1rem). iOS Safari hace zoom automático al enfocar cualquier input con
      un tamaño de fuente calculado por debajo de 16px; con 1rem se disparaba
-     ese zoom cada vez que se tocaba latitud, longitud, altitud o la
-     corrección C2/C3. */
+      ese zoom cada vez que se tocaba latitud o longitud. */
   font-size: 16px;
   padding: 0.5rem 0;
 }
@@ -1202,6 +1206,90 @@ body.kiosk .duration-line + .duration-line {
   background: rgba(var(--corona-rgb), 0.1);
 }
 
+.visibility-profile {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.visibility-title {
+  margin-bottom: 0.35rem;
+}
+
+.visibility-summary {
+  font-size: 0.82rem;
+  color: var(--text-outdoor);
+  line-height: 1.35;
+}
+
+.visibility-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 0.45rem;
+}
+
+.visibility-legend {
+  margin-top: 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.legend-item::before {
+  content: "";
+  width: 14px;
+  border-top: 2px solid currentColor;
+}
+
+.legend-item.observer::before,
+.legend-item.sun::before {
+  width: 8px;
+  height: 8px;
+  border-top: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.legend-item.terrain {
+  color: #949083;
+}
+
+.legend-item.line-c1 {
+  color: #6f6c63;
+}
+
+.legend-item.line-cm {
+  color: #8f8b7f;
+}
+
+.legend-item.line-c4 {
+  color: #b2ada0;
+}
+
+.legend-item.observer {
+  color: #a8a396;
+}
+
+.legend-item.sun {
+  color: var(--corona);
+}
+
+.visibility-note {
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
 .announce-row {
   display: flex;
   gap: 0.6rem;
@@ -1231,6 +1319,10 @@ body.kiosk .fullscreen-row {
 body.kiosk .alert-readiness,
 body.kiosk .copy-times-button,
 body.kiosk .fg-audio-note {
+  display: none !important;
+}
+
+body.kiosk .visibility-profile {
   display: none !important;
 }
 

@@ -72,6 +72,9 @@
         <ul>
           <li>La aplicación utiliza tu latitud, longitud y altitud para calcular los contactos locales del eclipse.</li>
           <li>Después, convierte la hora del cálculo a la hora de tu reloj aplicando una única corrección.</li>
+          <li>Si está disponible el dataset externo, aplica corrección de perfil lunar a C1, C2, C3 y C4 por interpolación local.</li>
+          <li>La altitud del Sol que se muestra en pantalla está corregida por refracción atmosférica estándar (Bennett/Saemundsson).</li>
+          <li>Si el Sol se pone antes de C4, se muestra el ocaso y la duración visible real hasta ese momento.</li>
           <li>Tras esto, añade un margen de seguridad a los avisos de gafas y de filtro fotográfico.</li>
           <li>Funciona sin conexión si abres la aplicación al menos una vez antes del eclipse en la misma ubicación de observación.</li>
         </ul>
@@ -94,15 +97,15 @@
           <p>Los elementos besselianos están referidos al Tiempo Dinámico Terrestre (TDT), una escala uniforme que no depende de la rotación de la Tierra. La hora civil (UTC), en cambio, sí depende de esa rotación, que se frena de forma leve e irregular por la fricción de marea. La diferencia entre ambas escalas se llama <strong>ΔT</strong>; para este eclipse, la NASA la fija en <strong>71,4 segundos</strong>. Cada resultado se convierte de TDT a UTC restando ese valor una única vez antes de mostrarlo.</p>
 
           <h3>Precisión y límites conocidos</h3>
-          <p>El instante de máximo eclipse geocéntrico que calcula la aplicación coincide con el publicado por la NASA con un margen de <strong>0,1 segundos</strong>. Aun así, quedan dos factores que ningún cálculo basado solo en elementos besselianos elimina del todo:</p>
+          <p>El instante de máximo eclipse geocéntrico que calcula la aplicación coincide con el publicado por la NASA con un margen de <strong>0,1 segundos</strong>. Con el dataset externo de perfil lunar, el ajuste típico frente a tablas de referencia como IGN queda alrededor de 1 segundo. Si ese dataset no está disponible, el cálculo vuelve al modelo besseliano base y el error puede subir varios segundos.</p>
           <ul>
-            <li><strong>Perfil del borde lunar:</strong> el modelo trata el borde de la Luna como un círculo perfecto. En realidad tiene montañas y valles —de ahí las perlas de Baily—, lo que puede adelantar o retrasar el contacto real entre 1 y 3 segundos; la propia NASA cita este mismo margen en sus predicciones.</li>
-            <li><strong>Refracción atmosférica:</strong> no se corrige la ligera curvatura que sufre la luz al atravesar la atmósfera. Es más perceptible cuanto más bajo está el Sol sobre el horizonte —aquí, entre 0° y 20° según el contacto—.</li>
+            <li><strong>Perfil del borde lunar:</strong> sin corrección externa, el modelo trata el borde de la Luna como un círculo perfecto. En realidad tiene montañas y valles —de ahí las perlas de Baily—, lo que adelanta o retrasa contactos.</li>
+            <li><strong>Refracción atmosférica:</strong> la altitud mostrada y la comprobación de «Sol bajo el horizonte» sí se corrigen con la fórmula estándar de Bennett/Saemundsson; es especialmente relevante con el Sol bajo, como en España al atardecer.</li>
           </ul>
-          <p>En conjunto, esto sitúa la precisión de la aplicación en <strong>1-7 segundos</strong> frente a fuentes de referencia como el IGN: de sobra para fotografía y observación, aunque no exacta al fotograma.</p>
+          <p>La aplicación está orientada a observación y fotografía; aun con correcciones, no debe considerarse una referencia legal o instrumental al fotograma.</p>
 
           <h3>Avisos de gafas y de filtro fotográfico</h3>
-          <p>Los avisos de «quitar/poner gafas» y «quitar/poner filtro» no se disparan exactamente en el C2/C3 calculado. Se aplica un pequeño margen de seguridad hacia el lado prudente: algo más tarde para quitar la protección, algo más pronto para volver a ponerla. Este margen es intencionadamente menor que el error máximo observado (1-7 s), así que sigue siendo una ayuda, no una garantía. Si conoces una corrección más precisa de C2/C3 para tu ubicación exacta, puedes introducirla en el campo «Corrección C2/C3» de la sección Ubicación.</p>
+          <p>Los avisos de «quitar/poner gafas» y «quitar/poner filtro» no se disparan exactamente en el C2/C3 calculado. Se aplica un pequeño margen de seguridad hacia el lado prudente: algo más tarde para quitar la protección, algo más pronto para volver a ponerla. Este margen es intencionadamente menor que el error máximo observado (1-7 s), así que sigue siendo una ayuda, no una garantía.</p>
         </details>
 
         <div class="about-sources">
@@ -151,17 +154,8 @@
         </div>
       </div>
       <div class="coord-field">
-        <span>Altitud (m)</span>
-        <input id="in-alt" type="number" step="1" inputmode="numeric" value="0" aria-label="Altitud en metros">
-      </div>
-      <div class="coord-field">
         <span>Estado</span>
         <span id="loc-source" class="loc-source">sin ubicación</span>
-      </div>
-      <div class="coord-field coord-field-wide">
-        <span>Corrección C2/C3 (s) (Opcional)</span>
-        <input id="in-manual-offset" type="number" step="1" inputmode="numeric" value="0" aria-label="Corrección manual en segundos para C2 y C3, por perfil del limbo lunar">
-        <span class="coord-hint">¿Qué es C2/C3? Toca la <strong>ⓘ</strong> de arriba.</span>
       </div>
     </div>
     <div class="coord-status" id="loc-status" aria-live="polite">Usa GPS, León o introduce coordenadas.</div>
@@ -202,6 +196,20 @@
       <div class="section-title">Contactos (hora local)</div>
       <div id="contacts-list"></div>
       <div class="duration-note" id="duration-note"></div>
+      <div id="visibility-profile" class="visibility-profile" hidden>
+        <div class="section-title visibility-title">Perfil de visibilidad</div>
+        <div id="visibility-profile-summary" class="visibility-summary"></div>
+        <svg id="visibility-profile-svg" class="visibility-chart" viewBox="0 0 320 170" role="img" aria-label="Perfil de terreno y línea de visibilidad del eclipse"></svg>
+        <div class="visibility-legend" aria-hidden="true">
+          <span class="legend-item terrain">Elevación</span>
+          <span class="legend-item observer">Observador</span>
+          <span class="legend-item sun">Sol (C1, Máx., C4)</span>
+          <span class="legend-item line-c1">Línea C1</span>
+          <span class="legend-item line-cm">Línea Máx.</span>
+          <span class="legend-item line-c4">Línea C4</span>
+        </div>
+        <div id="visibility-profile-note" class="visibility-note"></div>
+      </div>
     </div>
   </section>
 

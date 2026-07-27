@@ -1,0 +1,48 @@
+{
+  "version": 2,
+  "source": "OUTSIDEDATA/10bands_2026_3857_COG.tiff",
+  "encoding": "u16-linear-per-band",
+  "width": 3328,
+  "height": 3328,
+  "nodata": 65535,
+  "pixelScaleX": 1222.99245256282,
+  "pixelScaleY": 1222.99245256282,
+  "tieX": -2817774.6107047386,
+  "tieY": 6574807.42497772,
+  "projection": "EPSG:3857",
+  "bandOrder": [
+    "c1",
+    "c2",
+    "c3",
+    "c4"
+  ],
+  "bandMap": {
+    "c1": 6,
+    "c2": 9,
+    "c3": 10,
+    "c4": 8
+  },
+  "quantization": {
+    "c1": {
+      "offsetHours": 17.252819061279297,
+      "scaleHours": 1.2990390885335204e-05,
+      "maxQuantizationErrorSec": 0.023382703594165832
+    },
+    "c2": {
+      "offsetHours": 18.267248153686523,
+      "scaleHours": 1.578163420677607e-05,
+      "maxQuantizationErrorSec": 0.028406836793237744
+    },
+    "c3": {
+      "offsetHours": 17.145612716674805,
+      "scaleHours": 2.1853989844498073e-05,
+      "maxQuantizationErrorSec": 0.03933702455611865
+    },
+    "c4": {
+      "offsetHours": 19.092580795288086,
+      "scaleHours": 1.1560483342853625e-05,
+      "maxQuantizationErrorSec": 0.02080881763220077
+    }
+  },
+  "maxQuantizationErrorSec": 0.03933702455611865
+}

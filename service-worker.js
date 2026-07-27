@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_VERSION = "eclipsetimer-v70";
+const CACHE_VERSION = "eclipsetimer-v71";
 const UPDATE_TIMEOUT_MS = 1500;
 
 // iOS splash screens are requested only by Safari/iPadOS. They are cached on
@@ -22,7 +22,9 @@ const APP_SHELL = [
   "assets/images/logo-512-maskable.png",
   "assets/fonts/inter-400.woff2",
   "assets/fonts/inter-500.woff2",
-  "assets/fonts/inter-600.woff2"
+  "assets/fonts/inter-600.woff2",
+  "assets/data/lunar_contacts_2026.meta.json",
+  "assets/data/lunar_contacts_2026.u16.delta.gz"
 ];
 
 const CORE_UPDATE_URLS = new Set([
