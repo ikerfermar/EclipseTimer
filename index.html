@@ -64,18 +64,19 @@
       </div>
 
       <div class="about-body">
-        <p>La aplicación calcula cuatro instantes locales del eclipse: <strong>C1</strong> (empieza el eclipse parcial), <strong>C2</strong> (empieza la totalidad), <strong>C3</strong> (termina la totalidad) y <strong>C4</strong> (termina el eclipse parcial). Los avisos sonoros son una ayuda para observar y fotografiar, nunca la referencia definitiva: la decisión de quitarte o ponerte la protección ocular debe basarse siempre en el brillo real del Sol.</p>
+        <p>La aplicación calcula cuatro instantes locales del eclipse: <strong>C1</strong> (empieza el eclipse parcial), <strong>C2</strong> (empieza la totalidad), <strong>C3</strong> (termina la totalidad) y <strong>C4</strong> (termina el eclipse parcial).</p>
+
+        <p>Los avisos sonoros son una ayuda para observar y fotografiar, nunca la referencia definitiva: la decisión de quitarte o ponerte la protección ocular debe basarse siempre en el brillo real del Sol.</p>
 
         <p>El uso de la aplicación y de sus avisos corre por tu cuenta y riesgo. No sustituyen tu criterio ni el de un observador con experiencia, y el desarrollador no se hace responsable de daños oculares, materiales o de cualquier otro tipo derivados de su uso.</p>
 
         <h3>Resumen</h3>
         <ul>
-          <li>La aplicación utiliza tu latitud, longitud y altitud para calcular los contactos locales del eclipse.</li>
-          <li>Después, convierte la hora del cálculo a la hora de tu reloj aplicando una única corrección.</li>
-          <li>Si está disponible el dataset externo, aplica corrección de perfil lunar a C1, C2, C3 y C4 por interpolación local.</li>
-          <li>La altitud del Sol que se muestra en pantalla está corregida por refracción atmosférica estándar (Bennett/Saemundsson).</li>
-          <li>Si el Sol se pone antes de C4, se muestra el ocaso y la duración visible real hasta ese momento.</li>
-          <li>Tras esto, añade un margen de seguridad a los avisos de gafas y de filtro fotográfico.</li>
+          <li>Calcula tus tiempos locales del eclipse a partir de las coordenadas que introduces.</li>
+          <li>Cuando introduces una ubicación, usa el perfil lunar externo disponible para afinar C1, C2, C3 y C4.</li>
+          <li>La altitud del Sol que se muestra en pantalla está corregida por refracción atmosférica estándar.</li>
+          <li>Si el eclipse termina antes de C4, se muestra el ocaso y la duración visible real hasta ese momento.</li>
+          <li>Los avisos de gafas y de filtro fotográfico se disparan en los instantes calculados para C2 y C3.</li>
           <li>Funciona sin conexión si abres la aplicación al menos una vez antes del eclipse en la misma ubicación de observación.</li>
         </ul>
 
@@ -97,7 +98,7 @@
           <p>Los elementos besselianos están referidos al Tiempo Dinámico Terrestre (TDT), una escala uniforme que no depende de la rotación de la Tierra. La hora civil (UTC), en cambio, sí depende de esa rotación, que se frena de forma leve e irregular por la fricción de marea. La diferencia entre ambas escalas se llama <strong>ΔT</strong>; para este eclipse, la NASA la fija en <strong>71,4 segundos</strong>. Cada resultado se convierte de TDT a UTC restando ese valor una única vez antes de mostrarlo.</p>
 
           <h3>Precisión y límites conocidos</h3>
-          <p>El instante de máximo eclipse geocéntrico que calcula la aplicación coincide con el publicado por la NASA con un margen de <strong>0,1 segundos</strong>. Con el dataset externo de perfil lunar, el ajuste típico frente a tablas de referencia como IGN queda alrededor de 1 segundo. Si ese dataset no está disponible, el cálculo vuelve al modelo besseliano base y el error puede subir varios segundos.</p>
+          <p>El instante de máximo eclipse geocéntrico que calcula la aplicación coincide con el publicado por la NASA con un margen de <strong>0,1 segundos</strong>. Cuando el usuario introduce una ubicación, la app carga el dataset externo de perfil lunar para afinar C1, C2, C3 y C4. Con ese perfil, el ajuste típico frente a tablas de referencia como IGN queda alrededor de 1 segundo. Si ese dataset no está disponible, el cálculo vuelve al modelo besseliano base y el error puede subir varios segundos.</p>
           <ul>
             <li><strong>Perfil del borde lunar:</strong> sin corrección externa, el modelo trata el borde de la Luna como un círculo perfecto. En realidad tiene montañas y valles —de ahí las perlas de Baily—, lo que adelanta o retrasa contactos.</li>
             <li><strong>Refracción atmosférica:</strong> la altitud mostrada y la comprobación de «Sol bajo el horizonte» sí se corrigen con la fórmula estándar de Bennett/Saemundsson; es especialmente relevante con el Sol bajo, como en España al atardecer.</li>
@@ -105,7 +106,7 @@
           <p>La aplicación está orientada a observación y fotografía; aun con correcciones, no debe considerarse una referencia legal o instrumental al fotograma.</p>
 
           <h3>Avisos de gafas y de filtro fotográfico</h3>
-          <p>Los avisos de «quitar/poner gafas» y «quitar/poner filtro» no se disparan exactamente en el C2/C3 calculado. Se aplica un pequeño margen de seguridad hacia el lado prudente: algo más tarde para quitar la protección, algo más pronto para volver a ponerla. Este margen es intencionadamente menor que el error máximo observado (1-7 s), así que sigue siendo una ayuda, no una garantía.</p>
+          <p>Los avisos de «quitar/poner gafas» y «quitar/poner filtro» se disparan exactamente en los instantes calculados de C2 y C3. El bloque de seguridad principal ya queda recogido arriba en el panel.</p>
         </details>
 
         <div class="about-sources">

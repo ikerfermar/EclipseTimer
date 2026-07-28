@@ -39,19 +39,11 @@ const AUDIO_MEDIUM_WINDOW_SEC = 120;
 // "medium" (300 ms) de margen real antes de necesitar sonido, sin tener el
 // audio despierto tanto tiempo como con el margen anterior (120 s).
 const AUDIO_SUSPEND_MARGIN_SEC = 40;
-// Margen de seguridad visual para los avisos de gafas y filtro fotográfico.
-// Los tiempos de C2/C3 calculados tienen un error observado de hasta ~7 s
-// frente a fuentes de referencia (NASA/IGN), por el perfil del limbo lunar y
-// la propia precisión del cálculo. El aviso se retrasa/adelanta este margen
-// respecto al contacto calculado, como sesgo intencionado hacia el lado
-// seguro (se pierden unos segundos de totalidad "avisada", nunca al revés).
-// AVISO: fijado a propósito en 2 s, POR DEBAJO del error máximo observado
-// (~7 s). Con este valor el margen no cubre el peor caso: si el error real
-// va en la dirección desfavorable, el aviso puede seguir llegando unos
-// segundos antes de que la totalidad haya empezado de verdad. Si en algún
-// momento se quiere una garantía real frente al peor caso medido, este valor
-// debería subirse a ~7-8 s.
-const SAFETY_MARGIN_SEC = 2;
+// Avisos de gafas y filtro fotográfico sin sesgo artificial: se disparan
+// exactamente en el instante calculado de C2/C3. El acotado de error ya se
+// resuelve en la propia precisión del cálculo y en el perfil lunar aplicado
+// al recalcular la ubicación.
+const SAFETY_MARGIN_SEC = 0;
 const SAFETY_MARGIN_HOURS = SAFETY_MARGIN_SEC / 3600;
 // Tolerancia de "llegada tarde" para eventos de seguridad ocular (gafas y
 // filtro fotográfico). Si el tick se retrasa (pantalla bloqueada, app en
@@ -2074,9 +2066,8 @@ function addTimedEvent(list, key, time, payload) {
   list.push({ key, time, ...payload });
 }
 
-// Offsets base de los avisos de filtro fotográfico (antes de aplicar el
-// margen de seguridad). "off" = quitar el filtro antes de C2; "on" = volver
-// a ponerlo después de C3.
+// Offsets base de los avisos de filtro fotográfico. "off" = quitar el
+// filtro antes de C2; "on" = volver a ponerlo después de C3.
 const CONTACT_WARNING_LEAD_SEC = 60;
 const PHOTO_FILTER_OFF_LEAD_SEC = 20;
 const PHOTO_FILTER_ON_LAG_SEC = 20;
@@ -2084,9 +2075,8 @@ const PHOTO_FILTER_ON_LAG_SEC = 20;
 // Única fuente de verdad para los instantes de "quita el filtro"/"pon el
 // filtro". Antes buildTimedEvents() y checkSynchronizedCountdowns()
 // calculaban estos instantes por separado con la misma fórmula duplicada:
-// bastaba con tocar uno de los dos sitios (como pasó con el margen de
-// gafas) para que la cuenta atrás hablada y el aviso real dejaran de
-// coincidir. Ahora ambos llaman a esta función.
+// bastaba con tocar uno de los dos sitios para que la cuenta atrás hablada
+// y el aviso real dejaran de coincidir. Ahora ambos llaman a esta función.
 function photoFilterTimes(c) {
   if (c.c2 === null || c.c3 === null) return { off: null, on: null };
   return {
