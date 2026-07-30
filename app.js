@@ -2,6 +2,7 @@
 
 const T0_TDT = 18.0;
 const DELTA_T = 71.4;
+const SUN_SEMI_DIAMETER_DEG = 0.26667;
 
 const COEFF = {
   x: [0.475593, 0.5189288, -0.0000773, -0.0000088],
@@ -110,10 +111,25 @@ const DEFAULT_ALERT_COPY = {
       text: "Prepara el filtro",
       voice: "Prepara el filtro."
     },
+    "photo-refocus": {
+      tag: "Aviso",
+      text: "Re-enfoca en el sol",
+      voice: "Quedan cuatro minutos y medio para C2. Re-enfoca en el sol."
+    },
     "photo-remove-filter": {
       tag: "Aviso",
       text: "Filtro fuera ahora",
       voice: "Filtro fuera ahora."
+    },
+    "photo-mode-totality": {
+      tag: "Aviso",
+      text: "Cambiar a modo totalidad",
+      voice: "Cambia a modo totalidad."
+    },
+    "photo-mode-partial": {
+      tag: "Aviso",
+      text: "Cambiar a modo semiparcialidad",
+      voice: "Cambia a modo semiparcialidad."
     },
     "photo-filter-on": {
       tag: "Aviso",
@@ -134,8 +150,11 @@ const DEFAULT_ALERT_COPY = {
   photoSummary: {
     rows: {
       "photo-hand": "Prepara el filtro",
+      "photo-refocus": "Re-enfoca en el sol",
       "photo-remove-countdown": "Cuenta atrás filtro fuera",
       "photo-remove-filter": "Filtro fuera ahora",
+      "photo-mode-totality": "Cambiar a modo totalidad",
+      "photo-mode-partial": "Cambiar a modo semiparcialidad",
       "photo-filter-on-countdown": "Cuenta atrás filtro puesto",
       "photo-filter-on": "Filtro puesto ahora"
     }
@@ -284,9 +303,111 @@ function fetchWithTimeout(url, timeoutMs, fetchOptions = {}) {
   });
 }
 
+// Toda la precisión de la app (ΔT a 0.1s, ráster IGN a ~1s) no sirve de nada
+// si el reloj del dispositivo está desajustado unos segundos, algo que pasa
+// más de lo que parece (hora manual, cambio de país sin cobertura, etc.) y
+// de lo que el usuario no tiene forma de enterarse por sí mismo. Esta
+// comprobación contrasta Date.now() contra la cabecera HTTP "Date" del
+// propio servidor estático como segunda fuente independiente.
+//
+// Usamos HEAD en vez de GET a propósito: service-worker.js solo intercepta
+// peticiones GET ("if (event.request.method !== 'GET') return;"), así que
+// un HEAD se salta el Service Worker por completo. Eso nos garantiza (a)
+// una ida y vuelta real a la red cuando hay conexión, y (b) un fallo limpio
+// cuando no la hay, sin arriesgarnos a leer la cabecera Date de una
+// respuesta cacheada antigua y disparar un falso aviso.
+const CLOCK_SKEW_WARN_THRESHOLD_SEC = 2;
+const CLOCK_SKEW_CHECK_TIMEOUT_MS = 5000;
+const CLOCK_SKEW_CHECK_URL = "index.html";
+
+async function checkClockSkew() {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  try {
+    const sentAt = Date.now();
+    const response = await fetchWithTimeout(CLOCK_SKEW_CHECK_URL, CLOCK_SKEW_CHECK_TIMEOUT_MS, {
+      method: "HEAD",
+      cache: "no-store"
+    });
+    const receivedAt = Date.now();
+    const serverDateHeader = response.headers.get("date");
+    if (!serverDateHeader) return; // servidor sin cabecera Date: no podemos verificar, no avisamos
+    const serverMs = Date.parse(serverDateHeader);
+    if (!Number.isFinite(serverMs)) return;
+
+    // La cabecera Date solo tiene resolución de 1s y no nos da el instante
+    // exacto de servidor; usamos el punto medio del viaje de ida y vuelta
+    // como mejor estimación del instante local equivalente.
+    const localMidpointMs = (sentAt + receivedAt) / 2;
+    const skewSec = (localMidpointMs - serverMs) / 1000;
+
+    if (Math.abs(skewSec) >= CLOCK_SKEW_WARN_THRESHOLD_SEC) {
+      const dir = skewSec > 0 ? "adelantado" : "atrasado";
+      setClockStatus(`Reloj ${dir} ~${Math.round(Math.abs(skewSec))}s: revisa el ajuste automático.`, "warn");
+    } else {
+      setClockStatus("");
+    }
+  } catch (_) {
+    // Sin red, timeout, o CORS: no podemos verificar. No avisamos para
+    // evitar falsos positivos (igual que el resto de la app, un fallo aquí
+    // no debe bloquear ni alarmar sin motivo).
+  }
+}
+
+// El día del eclipse, api.open-meteo.com es un servicio gratuito de
+// terceros que muy probablemente estará bajo carga alta (mucha gente
+// consultando circunstancias locales a la vez) justo cuando la red móvil
+// también puede ir peor de lo normal. La elevación de un punto no cambia,
+// así que cachearla en localStorage evita depender de esa red en
+// consultas repetidas al mismo sitio (p. ej. el botón rápido de León).
+const ELEVATION_CACHE_KEY = "eclipsetimer-elevation-cache-v1";
+const ELEVATION_CACHE_MAX_ENTRIES = 30;
+
+function elevationCacheKey(lat, lon) {
+  // 3 decimales ≈ 111 m de precisión horizontal, de sobra para elevación.
+  return `${lat.toFixed(3)},${lon.toFixed(3)}`;
+}
+
+function readElevationCache() {
+  try {
+    const raw = localStorage.getItem(ELEVATION_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function getCachedAltitude(lat, lon) {
+  const cache = readElevationCache();
+  const entry = cache[elevationCacheKey(lat, lon)];
+  return Number.isFinite(entry?.alt) ? entry.alt : null;
+}
+
+function setCachedAltitude(lat, lon, alt) {
+  try {
+    const cache = readElevationCache();
+    const key = elevationCacheKey(lat, lon);
+    cache[key] = { alt, ts: Date.now() };
+    const keys = Object.keys(cache);
+    if (keys.length > ELEVATION_CACHE_MAX_ENTRIES) {
+      // Descarta las entradas más antiguas si la caché crece demasiado.
+      keys
+        .sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0))
+        .slice(0, keys.length - ELEVATION_CACHE_MAX_ENTRIES)
+        .forEach((k) => delete cache[k]);
+    }
+    localStorage.setItem(ELEVATION_CACHE_KEY, JSON.stringify(cache));
+  } catch (_) {
+    // localStorage lleno o no disponible (modo privado, etc.): no es crítico,
+    // simplemente no cachea y se repetirá la consulta la próxima vez.
+  }
+}
+
 // La altitud se obtiene del modelo de elevación usando lat/lon (sin entrada
 // manual) para simplificar el panel de ubicación.
 async function fetchAltitudeMeters(lat, lon) {
+  const cached = getCachedAltitude(lat, lon);
+  if (cached !== null) return cached;
+
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lon)
@@ -296,7 +417,9 @@ async function fetchAltitudeMeters(lat, lon) {
   const data = await response.json();
   const value = Array.isArray(data?.elevation) ? data.elevation[0] : data?.elevation;
   if (!Number.isFinite(value)) throw new Error("invalid elevation payload");
-  return Math.round(value);
+  const rounded = Math.round(value);
+  setCachedAltitude(lat, lon, rounded);
+  return rounded;
 }
 
 function lonLatToWebMercator(lonDeg, latDeg) {
@@ -477,6 +600,15 @@ function sampleLunarProfileContacts(dataset, lat, lon) {
   return { c1: c1Rel, c2: c2Rel, c3: c3Rel, c4: c4Rel };
 }
 
+
+
+async function getBestContacts(lat, lon, alt) {
+  const profile = await resolveLunarProfileContacts(lat, lon);
+  if (profile && profile.applied) {
+    return {contacts:{...profile.contacts,total:profile.contacts.c2!==null&&profile.contacts.c3!==null},source:'ign-profile'};
+  }
+  return {contacts:computeContacts(lat, lon, alt),source:'geometric'};
+}
 async function resolveLunarProfileContacts(lat, lon) {
   const resolveOnce = async () => {
     const dataset = await loadLunarProfileDataset();
@@ -1102,7 +1234,7 @@ function computeContacts(latDeg, lonEastDeg, heightM) {
     return c.m - Math.abs(c.L2);
   };
 
-  const step = 0.0025;
+  const step = 0.00125;
   let f1roots = [];
   let f2roots = [];
   const pushRoot = (roots, root) => {
@@ -1209,6 +1341,31 @@ function setOfflineStatus(msg, cls, timeoutMs = 0) {
     offlineStatusTimeout = setTimeout(() => {
       offlineStatusTimeout = null;
       setOfflineStatus("");
+    }, timeoutMs);
+  }
+}
+
+let clockStatusTimeout = null;
+function setClockStatus(msg, cls, timeoutMs = 0) {
+  const el = $("clock-status");
+  if (!el) return;
+  if (clockStatusTimeout) {
+    clearTimeout(clockStatusTimeout);
+    clockStatusTimeout = null;
+  }
+  if (!msg) {
+    el.hidden = true;
+    el.textContent = "";
+    el.className = "offline-status";
+    return;
+  }
+  el.textContent = msg;
+  el.className = `offline-status${cls ? ` ${cls}` : ""}`;
+  el.hidden = false;
+  if (timeoutMs > 0) {
+    clockStatusTimeout = setTimeout(() => {
+      clockStatusTimeout = null;
+      setClockStatus("");
     }, timeoutMs);
   }
 }
@@ -1559,17 +1716,31 @@ function computeSunsetDuringEclipse(c, lat, lon) {
   if (!c || c.c1 === null || c.c4 === null) return null;
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
+  // Ocaso oficial: el borde superior del Sol toca el horizonte. Como
+  // sunAltAz() devuelve la altitud aparente del centro solar, el umbral
+  // correcto es el semidiámetro solar por debajo del horizonte.
+  const sunsetThreshold = -SUN_SEMI_DIAMETER_DEG;
   const altStart = sunAltAz(c.c1, lat, lon).alt;
   const altEnd = sunAltAz(c.c4, lat, lon).alt;
-  if (!(altStart > 0 && altEnd <= 0)) return null;
+  if (!(altStart > sunsetThreshold && altEnd <= sunsetThreshold)) return null;
 
-  return findRoot((t) => sunAltAz(t, lat, lon).alt, c.c1, c.c4);
+  return findRoot((t) => sunAltAz(t, lat, lon).alt - sunsetThreshold, c.c1, c.c4);
 }
 
 function visibleEndTime(c) {
   if (!c || c.c4 === null) return null;
   if (c.sunset === null || c.sunset === undefined) return c.c4;
+  if (c.c1 === null) return c.c4;
+  if (c.sunset <= c.c1) return null;
   return Math.min(c.c4, c.sunset);
+}
+
+function hasSunsetDuringEclipse(c) {
+  return Boolean(c && c.c1 !== null && c.c4 !== null && c.sunset !== null && c.sunset !== undefined && c.sunset > c.c1 && c.sunset < c.c4);
+}
+
+function sunsetBeforeContactStart(c) {
+  return Boolean(c && c.c1 !== null && c.sunset !== null && c.sunset !== undefined && c.sunset <= c.c1);
 }
 
 function formatDurationClock(durationSec) {
@@ -1588,6 +1759,7 @@ function renderContacts() {
 
   const list = $("contacts-list");
   list.replaceChildren();
+  activeRowNodes = null; // las filas de abajo son nodos nuevos; invalida la caché de updateActiveRows
 
   const rows = [
     { tag: "C1", desc: "Inicio eclipse", t: c.c1 },
@@ -1639,11 +1811,14 @@ function renderContacts() {
     } else {
       fields.push({ title: "Solo parcial (fuera de la franja de totalidad)", value: formatDurationClock(totalDurSec) });
     }
-    if (c.sunset !== null && c.sunset !== undefined && c.sunset < c.c4) {
+    if (hasSunsetDuringEclipse(c)) {
       fields.push({ title: "Ocaso del Sol", value: fmtLocal(tToDate(c.sunset)), warning: true });
       if (visibleDurSec !== null) {
         fields.push({ title: "Duración visible hasta ocaso", value: formatDurationClock(visibleDurSec) });
       }
+    } else if (sunsetBeforeContactStart(c)) {
+      fields.push({ title: "Ocaso del Sol", value: fmtLocal(tToDate(c.sunset)), warning: true });
+      fields.push({ title: "Visibilidad", value: "El Sol se pone antes de C1; no habrá eclipse visible desde aquí.", warning: true });
     }
     const nodes = fields.map((field) => createDurationLine(field));
     nodes.push(createCopyTimesButton());
@@ -1673,9 +1848,12 @@ function durationLines(c) {
     lines.push(`Eclipse completo: ${formatDurationClock(fullSec)}`);
   }
 
-  if (c.sunset !== null && c.sunset !== undefined && c.sunset < c.c4) {
+  if (hasSunsetDuringEclipse(c)) {
     lines.push(`Ocaso del Sol: ${fmtLocal(tToDate(c.sunset))}`);
     lines.push(`Duración visible hasta ocaso: ${formatDurationClock((c.sunset - c.c1) * 3600)}`);
+  } else if (sunsetBeforeContactStart(c)) {
+    lines.push(`Ocaso del Sol: ${fmtLocal(tToDate(c.sunset))}`);
+    lines.push(`Visibilidad: el Sol se pone antes de C1; no habrá eclipse visible desde aquí.`);
   }
 
   return lines;
@@ -2121,9 +2299,12 @@ function renderAlertSummaries() {
   const filterOffSec = PHOTO_FILTER_OFF_LEAD_SEC - SAFETY_MARGIN_SEC;
   const filterOnSec = PHOTO_FILTER_ON_LAG_SEC - SAFETY_MARGIN_SEC;
 
+  appendAlertSummaryRow(photoEvents, formatRelativeContactTime("C2", -270), photoSummaryText("photo-refocus"));
   appendAlertSummaryRow(photoEvents, formatRelativeContactTime("C2", -40), photoSummaryText("photo-hand"));
   appendAlertSummaryRow(photoEvents, formatRelativeRange("C2", -(filterOffSec + 5), -filterOffSec), photoSummaryText("photo-remove-countdown"));
   appendAlertSummaryRow(photoEvents, formatRelativeContactTime("C2", -filterOffSec), photoSummaryText("photo-remove-filter"));
+  appendAlertSummaryRow(photoEvents, formatRelativeContactTime("C2", 8), photoSummaryText("photo-mode-totality"));
+  appendAlertSummaryRow(photoEvents, formatRelativeContactTime("C3", -8), photoSummaryText("photo-mode-partial"));
   appendAlertSummaryRow(photoEvents, formatRelativeRange("C3", filterOnSec - 5, filterOnSec), photoSummaryText("photo-filter-on-countdown"));
   appendAlertSummaryRow(photoEvents, formatRelativeContactTime("C3", filterOnSec), photoSummaryText("photo-filter-on"));
 }
@@ -2184,6 +2365,14 @@ function buildTimedEvents(c) {
     });
 
     if (state.photoEnabled) {
+      addTimedEvent(events, "photo-refocus", c.c2 - 270 / 3600, {
+        ...eventCopy("photo-refocus"),
+        color: "#e0ac5c",
+        beepFreq: 820,
+        beepTimes: 1,
+        vibrate: [100]
+      });
+
       addTimedEvent(events, "photo-hand", c.c2 - 40 / 3600, {
         ...eventCopy("photo-hand"),
         color: "#e0ac5c",
@@ -2203,6 +2392,22 @@ function buildTimedEvents(c) {
         beepFreq: 680,
         beepTimes: 2,
         vibrate: [90, 80, 90]
+      });
+
+      addTimedEvent(events, "photo-mode-totality", c.c2 + 8 / 3600, {
+        ...eventCopy("photo-mode-totality"),
+        color: "#5f7a5e",
+        beepFreq: 700,
+        beepTimes: 1,
+        vibrate: [100]
+      });
+
+      addTimedEvent(events, "photo-mode-partial", c.c3 - 8 / 3600, {
+        ...eventCopy("photo-mode-partial"),
+        color: "#9c4632",
+        beepFreq: 500,
+        beepTimes: 1,
+        vibrate: [100]
       });
 
       addTimedEvent(events, "photo-filter-on", pf.on, {
@@ -2420,26 +2625,37 @@ function updateCountdown(t, c) {
   }
 }
 
+// Cachea las 8 referencias (row-C1..C4, geo-C1..C4) para no hacer
+// getElementById en cada tick. renderContacts() reconstruye esas filas con
+// replaceChildren() en cada recálculo de ubicación, así que invalida esta
+// caché ahí (activeRowNodes = null) para no quedarse con nodos obsoletos.
+let activeRowNodes = null;
+function getActiveRowNodes() {
+  if (!activeRowNodes) {
+    activeRowNodes = ["C1", "C2", "C3", "C4"].map((tag) => ({
+      row: $(`row-${tag}`),
+      geo: $(`geo-${tag}`)
+    }));
+  }
+  return activeRowNodes;
+}
+
 function updateActiveRows(t, c) {
-  ["C1", "C2", "C3", "C4"].forEach((tag) => {
-    const row = $(`row-${tag}`);
-    if (row) row.classList.remove("active");
-    const geo = $(`geo-${tag}`);
-    if (geo) geo.classList.remove("active");
+  const nodes = getActiveRowNodes();
+  nodes.forEach(({ row, geo }) => {
+    row?.classList.remove("active");
+    geo?.classList.remove("active");
   });
 
-  if (c.c1 !== null && c.c2 !== null && t >= c.c1 && t < c.c2) {
-    $("row-C1")?.classList.add("active");
-    $("geo-C1")?.classList.add("active");
-  } else if (c.c2 !== null && c.c3 !== null && t >= c.c2 && t <= c.c3) {
-    $("row-C2")?.classList.add("active");
-    $("geo-C2")?.classList.add("active");
-  } else if (c.c3 !== null && c.c4 !== null && t > c.c3 && t <= c.c4) {
-    $("row-C3")?.classList.add("active");
-    $("geo-C3")?.classList.add("active");
-  } else if (c.c4 !== null && t > c.c4) {
-    $("row-C4")?.classList.add("active");
-    $("geo-C4")?.classList.add("active");
+  let idx = -1;
+  if (c.c1 !== null && c.c2 !== null && t >= c.c1 && t < c.c2) idx = 0;
+  else if (c.c2 !== null && c.c3 !== null && t >= c.c2 && t <= c.c3) idx = 1;
+  else if (c.c3 !== null && c.c4 !== null && t > c.c3 && t <= c.c4) idx = 2;
+  else if (c.c4 !== null && t > c.c4) idx = 3;
+
+  if (idx >= 0) {
+    nodes[idx].row?.classList.add("active");
+    nodes[idx].geo?.classList.add("active");
   }
 }
 
@@ -2913,6 +3129,7 @@ function bindNetworkStatus() {
   window.addEventListener("online", () => {
     setOfflineStatus("Conexión recuperada.", "ok", 2600);
     configureSupportButton();
+    checkClockSkew();
   });
 }
 
@@ -2975,4 +3192,5 @@ window.addEventListener("load", () => {
   // ficheros, simplemente se refresca el texto correspondiente.
   loadAlertCopyConfig().then(() => renderAlertSummaries());
   loadPaypalConfig().then(() => configureSupportButton());
+  checkClockSkew();
 });

@@ -30,12 +30,27 @@
       "text": "Prepara el filtro",
       "voice": "Pon la mano en el filtro."
     },
+    "photo-refocus": {
+      "tag": "Aviso",
+      "text": "Re-enfoca en el sol",
+      "voice": "Quedan cuatro minutos y medio para C2. Re-enfoca en el sol."
+    },
     "photo-remove-filter": {
       "tag": "Aviso",
       "text": "Quita el filtro",
       "voice": "Quita el filtro."
     },
-    "photo-filter-on": {
+    "photo-mode-totality": {
+      "tag": "Aviso",
+      "text": "Cambiar a modo totalidad",
+      "voice": "Cambia a modo totalidad."
+    },
+        "photo-mode-partial": {
+      "tag": "Aviso",
+      "text": "Cambiar a modo semiparcialidad",
+      "voice": "Cambia a modo semiparcialidad."
+    },
+"photo-filter-on": {
       "tag": "Aviso",
       "text": "Pon el filtro",
       "voice": "Pon el filtro."
@@ -54,8 +69,11 @@
   "photoSummary": {
     "rows": {
       "photo-hand": "Prepara el filtro",
+      "photo-refocus": "Re-enfoca en el sol",
       "photo-remove-countdown": "Cuenta atrás filtro fuera",
       "photo-remove-filter": "Quita el filtro",
+      "photo-mode-totality": "Cambiar a modo totalidad",
+      "photo-mode-partial": "Cambiar a modo semiparcialidad",
       "photo-filter-on-countdown": "Cuenta atrás filtro puesto",
       "photo-filter-on": "Pon el filtro"
     }
