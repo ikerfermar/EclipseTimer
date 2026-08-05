@@ -272,6 +272,8 @@ const ELEVATION_FETCH_TIMEOUT_MS = 5000;
 const ELEVATION_API_BASE_URL = "https://api.open-meteo.com/v1/elevation";
 const LUNAR_PROFILE_META_FETCH_TIMEOUT_MS = 6000;
 const LUNAR_PROFILE_BIN_FETCH_TIMEOUT_MS = 20000;
+const LUNAR_PROFILE_META_URL = "assets/data/lunar_contacts_2026.meta.json";
+const LUNAR_PROFILE_BIN_URL = "assets/data/lunar_contacts_2026.u16.delta.gz";
 const ECLIPSE_T0_UTC_HOUR = T0_TDT - DELTA_T / 3600;
 const VIS_PROFILE_FETCH_TIMEOUT_MS = 5000;
 const VIS_PROFILE_MAX_DISTANCE_M = 50000;
@@ -448,7 +450,21 @@ async function loadLunarProfileDataset() {
   if (lunarProfileDataset) return lunarProfileDataset;
   if (lunarProfileLoadPromise) return lunarProfileLoadPromise;
 
-  lunarProfileLoadPromise = new Promise((resolve, reject) => {
+  // WebKit de iOS ha tenido diferencias entre el hilo principal y los
+  // Workers al transferir buffers grandes descomprimidos. Esta ruta era la
+  // implementación original, ya probada en iPhone/iPad; mantenemos el
+  // Worker para el resto de navegadores, donde evita bloquear la interfaz.
+  const loadOnMainThread = async () => {
+    const metaResponse = await fetchWithTimeout(LUNAR_PROFILE_META_URL, LUNAR_PROFILE_META_FETCH_TIMEOUT_MS, { cache: "force-cache" });
+    if (!metaResponse.ok) throw new Error("lunar profile meta unavailable");
+    const meta = await metaResponse.json();
+    const binResponse = await fetchWithTimeout(LUNAR_PROFILE_BIN_URL, LUNAR_PROFILE_BIN_FETCH_TIMEOUT_MS, { cache: "force-cache" });
+    if (!binResponse.ok) throw new Error("lunar profile binary unavailable");
+    if (typeof DecompressionStream !== "function" || !binResponse.body) throw new Error("gzip decompression unsupported");
+    const buffer = await new Response(binResponse.body.pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+    return { meta, buffer, needsDeltaDecoding: true };
+  };
+  const loadInWorker = () => new Promise((resolve, reject) => {
     if (typeof Worker !== "function") {
       reject(new Error("web workers unsupported"));
       return;
@@ -470,10 +486,12 @@ async function loadLunarProfileDataset() {
         return;
       }
       if (event.data?.type !== "ready") return;
-      finish(() => resolve(event.data));
+      finish(() => resolve({ ...event.data, needsDeltaDecoding: false }));
     });
     worker.postMessage({ type: "load" });
-  }).then(({ meta, buffer }) => {
+  });
+
+  lunarProfileLoadPromise = (isLikelyIOS() ? loadOnMainThread() : loadInWorker()).then(({ meta, buffer, needsDeltaDecoding }) => {
 
     const width = Number(meta.width);
     const height = Number(meta.height);
@@ -496,8 +514,7 @@ async function loadLunarProfileDataset() {
     if (encoding === "u16-linear-per-band") {
       arr = new Uint16Array(buffer);
       if (arr.length !== cells * 4) throw new Error("unexpected lunar profile binary size");
-      // El Worker ya deshizo el delta por fila antes de transferir este
-      // búfer. Volver a aplicarlo aquí corrompería los contactos.
+      if (needsDeltaDecoding) undoRowDeltaInPlace(arr, width, height, cells, 4);
     } else {
       arr = new Float32Array(buffer);
       if (arr.length !== cells * 4) throw new Error("unexpected lunar profile binary size");
