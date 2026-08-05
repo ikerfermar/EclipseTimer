@@ -496,13 +496,8 @@ async function loadLunarProfileDataset() {
     if (encoding === "u16-linear-per-band") {
       arr = new Uint16Array(buffer);
       if (arr.length !== cells * 4) throw new Error("unexpected lunar profile binary size");
-      // El fichero servido está delta-codificado por fila (mod 65536, filtro
-      // tipo PNG "Sub") + gzip para bajar de 88.6 MB a ~5.4 MB. Se deshace
-      // aquí con una suma acumulada por fila, banda a banda, incluyendo los
-      // píxeles nodata (65535) como un valor más: el codificador de build
-      // (scripts/build-lunar-contacts.mjs) tampoco los trata como caso
-      // especial, así que la reconstrucción es exacta bit a bit.
-      undoRowDeltaInPlace(arr, width, height, cells, 4);
+      // El Worker ya deshizo el delta por fila antes de transferir este
+      // búfer. Volver a aplicarlo aquí corrompería los contactos.
     } else {
       arr = new Float32Array(buffer);
       if (arr.length !== cells * 4) throw new Error("unexpected lunar profile binary size");

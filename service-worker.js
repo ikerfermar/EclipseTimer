@@ -5,7 +5,7 @@
 // previous deploy, the browser won't detect an update, the install/activate
 // cycle never runs, and clients keep being served the old cached files with
 // no error or warning of any kind.
-const CACHE_VERSION = "eclipsetimer-v77";
+const CACHE_VERSION = "eclipsetimer-v78";
 // How long we wait for a fresh network response for core app-shell files
 // before falling back to the cached copy. This matters most on a remote
 // observation site with slow/intermittent connectivity (the typical
