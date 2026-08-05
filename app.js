@@ -1,5 +1,7 @@
 "use strict";
 
+import { chunkPoints, parseCoordinateInput, validateCoordinates } from "./core.mjs";
+
 const T0_TDT = 18.0;
 const DELTA_T = 71.4;
 const SUN_SEMI_DIAMETER_DEG = 0.26667;
@@ -74,10 +76,7 @@ const $ = (id) => document.getElementById(id);
 // caracter "equivocado" al pegar. Con type="text" + este parser propio
 // aceptamos coma o punto indistintamente (por ejemplo, al pegar unas
 // coordenadas copiadas de Google Maps, que usa punto).
-function parseDecimal(str) {
-  if (typeof str !== "string") return NaN;
-  return parseFloat(str.trim().replace(",", "."));
-}
+const parseDecimal = parseCoordinateInput;
 
 const DEFAULT_ALERT_COPY = {
   events: {
@@ -273,14 +272,14 @@ const ELEVATION_FETCH_TIMEOUT_MS = 5000;
 const ELEVATION_API_BASE_URL = "https://api.open-meteo.com/v1/elevation";
 const LUNAR_PROFILE_META_FETCH_TIMEOUT_MS = 6000;
 const LUNAR_PROFILE_BIN_FETCH_TIMEOUT_MS = 20000;
-const LUNAR_PROFILE_META_URL = "assets/data/lunar_contacts_2026.meta.json";
-const LUNAR_PROFILE_BIN_URL = "assets/data/lunar_contacts_2026.u16.delta.gz";
 const ECLIPSE_T0_UTC_HOUR = T0_TDT - DELTA_T / 3600;
 const VIS_PROFILE_FETCH_TIMEOUT_MS = 5000;
-const VIS_PROFILE_MAX_DISTANCE_M = 10000;
-// 3 momentos (C1, CM, C4) x este valor no puede superar el límite de 100
-// coordenadas por request de la Open-Meteo Elevation API.
-const VIS_PROFILE_SAMPLE_COUNT = 33;
+const VIS_PROFILE_MAX_DISTANCE_M = 50000;
+// 3 momentos (C1, CM, C4) x 61 puntos = 183 coordenadas. Se fragmentan
+// en solicitudes de hasta 100 coordenadas para cubrir también obstáculos
+// lejanos, que importan mucho con el Sol bajo al atardecer.
+const VIS_PROFILE_SAMPLE_COUNT = 61;
+const VIS_PROFILE_MAX_POINTS_PER_REQUEST = 100;
 
 // fetch() no tiene timeout propio: con red lenta o intermitente (típico en
 // un sitio de observación remoto) podía tardar mucho en fallar. Como antes
@@ -449,18 +448,32 @@ async function loadLunarProfileDataset() {
   if (lunarProfileDataset) return lunarProfileDataset;
   if (lunarProfileLoadPromise) return lunarProfileLoadPromise;
 
-  lunarProfileLoadPromise = (async () => {
-    const metaResponse = await fetchWithTimeout(LUNAR_PROFILE_META_URL, LUNAR_PROFILE_META_FETCH_TIMEOUT_MS, { cache: "force-cache" });
-    if (!metaResponse.ok) throw new Error("lunar profile meta unavailable");
-    const meta = await metaResponse.json();
-
-    const binResponse = await fetchWithTimeout(LUNAR_PROFILE_BIN_URL, LUNAR_PROFILE_BIN_FETCH_TIMEOUT_MS, { cache: "force-cache" });
-    if (!binResponse.ok) throw new Error("lunar profile binary unavailable");
-    if (typeof DecompressionStream !== "function" || !binResponse.body) {
-      throw new Error("gzip decompression unsupported");
+  lunarProfileLoadPromise = new Promise((resolve, reject) => {
+    if (typeof Worker !== "function") {
+      reject(new Error("web workers unsupported"));
+      return;
     }
-    const decompressedStream = binResponse.body.pipeThrough(new DecompressionStream("gzip"));
-    const buffer = await new Response(decompressedStream).arrayBuffer();
+    const worker = new Worker("lunar-profile-worker.js");
+    const timeoutId = setTimeout(() => {
+      worker.terminate();
+      reject(new Error("lunar profile worker timeout"));
+    }, LUNAR_PROFILE_BIN_FETCH_TIMEOUT_MS + LUNAR_PROFILE_META_FETCH_TIMEOUT_MS + 3000);
+    const finish = (callback) => {
+      clearTimeout(timeoutId);
+      worker.terminate();
+      callback();
+    };
+    worker.addEventListener("error", () => finish(() => reject(new Error("lunar profile worker failed"))), { once: true });
+    worker.addEventListener("message", (event) => {
+      if (event.data?.type === "error") {
+        finish(() => reject(new Error(event.data.message || "lunar profile unavailable")));
+        return;
+      }
+      if (event.data?.type !== "ready") return;
+      finish(() => resolve(event.data));
+    });
+    worker.postMessage({ type: "load" });
+  }).then(({ meta, buffer }) => {
 
     const width = Number(meta.width);
     const height = Number(meta.height);
@@ -515,7 +528,7 @@ async function loadLunarProfileDataset() {
       }
     };
     return lunarProfileDataset;
-  })().catch((err) => {
+  }).catch((err) => {
     lunarProfileDataset = null;
     throw err;
   }).finally(() => {
@@ -667,18 +680,23 @@ function parseElevationArray(payload) {
 }
 
 async function fetchTerrainProfile(points) {
-  const params = new URLSearchParams({
-    latitude: points.map((p) => p.lat.toFixed(6)).join(","),
-    longitude: points.map((p) => p.lon.toFixed(6)).join(",")
-  });
-  const response = await fetchWithTimeout(`https://api.open-meteo.com/v1/elevation?${params.toString()}`, VIS_PROFILE_FETCH_TIMEOUT_MS);
-  if (!response.ok) throw new Error("terrain profile unavailable");
-  const data = await response.json();
-  const values = parseElevationArray(data);
-  if (!Array.isArray(values) || values.length !== points.length) throw new Error("invalid terrain profile payload");
-  const parsed = values.map((v) => Number(v));
-  if (!parsed.every(Number.isFinite)) throw new Error("invalid terrain profile values");
-  return parsed;
+  const fetchBatch = async (batch) => {
+    const params = new URLSearchParams({
+      latitude: batch.map((p) => p.lat.toFixed(6)).join(","),
+      longitude: batch.map((p) => p.lon.toFixed(6)).join(",")
+    });
+    const response = await fetchWithTimeout(`https://api.open-meteo.com/v1/elevation?${params.toString()}`, VIS_PROFILE_FETCH_TIMEOUT_MS);
+    if (!response.ok) throw new Error("terrain profile unavailable");
+    const data = await response.json();
+    const values = parseElevationArray(data);
+    if (!Array.isArray(values) || values.length !== batch.length) throw new Error("invalid terrain profile payload");
+    const parsed = values.map((v) => Number(v));
+    if (!parsed.every(Number.isFinite)) throw new Error("invalid terrain profile values");
+    return parsed;
+  };
+  const batches = chunkPoints(points, VIS_PROFILE_MAX_POINTS_PER_REQUEST);
+  const results = await Promise.all(batches.map(fetchBatch));
+  return results.flat();
 }
 
 function maximumEclipseTime(c) {
@@ -899,7 +917,7 @@ function renderVisibilityProfile(data) {
     ? "El eclipse es visible desde este punto en C1, Máx. y C4."
     : `El relieve bloquea la visibilidad en ${blockedMoments.join(", ")}.`;
 
-  note.textContent = "";
+  note.textContent = `Evaluado hasta ${formatDistanceM(data.maxDistanceM)}; el relieve más lejano no se incluye.`;
 }
 
 async function updateVisibilityProfile(contacts, lat, lon, observerAlt) {
@@ -1620,8 +1638,9 @@ async function recalc(options = {}) {
   const lat = readLat();
   const lon = readLon();
 
-  if (Number.isNaN(lat) || Number.isNaN(lon)) {
-    setLocStatus("Introduce latitud y longitud válidas.", "err");
+  const coordinateValidation = validateCoordinates(lat, lon);
+  if (!coordinateValidation.valid) {
+    setLocStatus(coordinateValidation.message, "err");
     return;
   }
 

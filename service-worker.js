@@ -5,7 +5,7 @@
 // previous deploy, the browser won't detect an update, the install/activate
 // cycle never runs, and clients keep being served the old cached files with
 // no error or warning of any kind.
-const CACHE_VERSION = "eclipsetimer-v76";
+const CACHE_VERSION = "eclipsetimer-v77";
 // How long we wait for a fresh network response for core app-shell files
 // before falling back to the cached copy. This matters most on a remote
 // observation site with slow/intermittent connectivity (the typical
@@ -22,6 +22,8 @@ const APP_SHELL = [
   "paypal.json",
   "styles.css",
   "app.js",
+  "core.mjs",
+  "lunar-profile-worker.js",
   "manifest.webmanifest",
   "assets/images/logo-32.png",
   "assets/images/logo-48.png",
@@ -43,6 +45,8 @@ const CORE_UPDATE_URLS = new Set([
   new URL("paypal.json", self.location).href,
   new URL("styles.css", self.location).href,
   new URL("app.js", self.location).href,
+  new URL("core.mjs", self.location).href,
+  new URL("lunar-profile-worker.js", self.location).href,
   new URL("manifest.webmanifest", self.location).href
 ]);
 
